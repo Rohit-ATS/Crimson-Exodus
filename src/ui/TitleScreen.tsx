@@ -17,6 +17,24 @@ export default function TitleScreen() {
     return () => clearInterval(id)
   }, [])
 
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return
+      const target = event.target
+      if (target instanceof HTMLElement && target.closest('button, input, textarea, select, a, [contenteditable="true"]')) return
+
+      if (event.code === 'Enter' || event.code === 'NumpadEnter') {
+        event.preventDefault()
+        startBriefing()
+      } else if (event.code === 'Slash' && event.shiftKey) {
+        event.preventDefault()
+        setShowControls((visible) => !visible)
+      }
+    }
+    window.addEventListener('keydown', handleShortcut)
+    return () => window.removeEventListener('keydown', handleShortcut)
+  }, [startBriefing])
+
   const now = new Date()
   const link = linkGeometry(now)
   const clock = marsClock(now, SITE.eastLonDeg, SITE.latDeg)
@@ -91,10 +109,10 @@ export default function TitleScreen() {
               style={{ padding: '15px 34px', fontSize: 14, letterSpacing: '0.2em' }}
               onClick={startBriefing}
             >
-              &#9656;&nbsp; Start Marswalk
+              &#9656;&nbsp; Start Marswalk <span className="mono" style={{ fontSize: 10, opacity: 0.75 }}>[Enter]</span>
             </button>
             <button className="btn ghost" style={{ padding: '15px 22px' }} onClick={() => setShowControls((v) => !v)}>
-              {showControls ? 'Hide controls' : 'Controls & mission rules'}
+              {showControls ? 'Hide controls' : 'Controls & mission rules [?]'}
             </button>
           </div>
 
