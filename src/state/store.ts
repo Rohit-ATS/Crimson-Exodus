@@ -389,6 +389,8 @@ export const useStore = create<Store>((set, get) => ({
     // Face Jack down the first leg of the chosen route.
     const [x1, z1] = route.waypoints[1] ?? [0, -1]
     live.jack.heading = Math.atan2(x1, z1)
+    // Start with the camera behind Jack, looking down the first leg.
+    live.camYaw = live.jack.heading
     live.jack.x = 0
     live.jack.z = 26
     live.jack.y = heightAt(0, 26)
@@ -471,8 +473,10 @@ export const useStore = create<Store>((set, get) => ({
           if (input.back) iz -= 1
           if (input.left) ix -= 1
           if (input.right) ix += 1
-          if (input.turnLeft) live.camYaw -= dt * 1.6
-          if (input.turnRight) live.camYaw += dt * 1.6
+          // camYaw is the camera's look direction (0 = +z). Increasing it
+          // turns the view to the left.
+          if (input.turnLeft) live.camYaw += dt * 1.6
+          if (input.turnRight) live.camYaw -= dt * 1.6
         }
 
         if (s.autoTraverse) {
@@ -490,11 +494,15 @@ export const useStore = create<Store>((set, get) => ({
           }
           const len = Math.hypot(ix, iz) || 1
           ix /= len; iz /= len
+          // Let the camera swing round behind Jack so the view follows the walk.
+          const dYaw = Math.atan2(Math.sin(Math.atan2(ix, iz) - live.camYaw), Math.cos(Math.atan2(ix, iz) - live.camYaw))
+          live.camYaw += dYaw * Math.min(1, dt * 1.5)
         } else if (ix || iz) {
-          // Rotate input into world space using the camera yaw.
+          // Rotate input into world space relative to where the camera looks.
+          // Camera forward is (sin θ, cos θ); screen-right is (-cos θ, sin θ).
           const c = Math.cos(live.camYaw), sn = Math.sin(live.camYaw)
-          const wx = ix * c + iz * sn
-          const wz = -ix * sn + iz * c
+          const wx = iz * sn - ix * c
+          const wz = iz * c + ix * sn
           ix = wx; iz = wz
           const len = Math.hypot(ix, iz) || 1
           ix /= len; iz /= len

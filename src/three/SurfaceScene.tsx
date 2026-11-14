@@ -236,7 +236,8 @@ function CameraRig() {
     if (live.firstPerson) {
       // Eye height inside the helmet.
       const eye = new THREE.Vector3(j.x, j.y + 1.58, j.z)
-      const fwd = new THREE.Vector3(Math.sin(j.heading), 0, Math.cos(j.heading))
+      // Look where the player is steering (the same frame movement uses).
+      const fwd = new THREE.Vector3(Math.sin(live.camYaw), 0, Math.cos(live.camYaw))
       pos.current.lerp(eye, Math.min(1, dt * 14))
       camera.position.copy(pos.current)
       look.current.lerp(
@@ -247,7 +248,9 @@ function CameraRig() {
       return
     }
 
-    const yaw = j.heading + Math.PI + live.camYaw
+    // Orbit camera: independent of Jack's facing, so turning him never
+    // swings the view and flips the meaning of the movement keys.
+    const yaw = live.camYaw + Math.PI
     const d = live.camDist
     const want = new THREE.Vector3(
       j.x + Math.sin(yaw) * d,
