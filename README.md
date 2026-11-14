@@ -42,6 +42,11 @@ npm run build
 npm run preview
 ```
 
+On the title screen, press **Enter** to start the briefing or **?** to show the
+controls and mission rules. The title screen scrolls on short and narrow
+displays, keyboard focus is outlined, and system reduced-motion preferences are
+respected.
+
 It is a static site — the `dist/` folder deploys to Vercel, Netlify, GitHub Pages
 or any static host with no server, no API keys and no build-time secrets.
 
