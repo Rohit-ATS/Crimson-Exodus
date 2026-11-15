@@ -53,6 +53,10 @@ const anyStationStarted = (s: State) =>
   })
 
 export const HINTS: Hint[] = [
+  // ORDER IS PRIORITY. The first relevant, unseen, unsatisfied hint wins, so
+  // warnings outrank actions and actions outrank background explanation. A
+  // player standing next to a station must be told to press F, not reminded
+  // in general terms that the clock is running.
   // --- Before the walk -----------------------------------------------------
   {
     id: 'briefing',
@@ -92,15 +96,29 @@ export const HINTS: Hint[] = [
     tone: 'action',
   },
   {
-    id: 'surface-clock',
+    id: 'margin',
     phases: ['surface'],
-    when: (s) => s.distanceWalkedM > 80 && !anyStationStarted(s),
-    done: (s) => anyStationStarted(s) || s.time.evaSec > 2400,
-    title: 'The clock is the enemy, not the terrain',
+    when: (s) => s.ret.status !== 'nominal' && !s.aborting,
+    done: (s) => s.aborting || !!s.outcome,
+    title: 'The reserve is not a resource',
     body:
-      'Oxygen, the CO₂ scrubber, battery and water are all draining, and the walk home gets longer with every step out. ' +
-      'The RETURN ESTIMATE on the left is the only number that decides whether this EVA ends well.',
-    tone: 'info',
+      'Your margin has crossed into the reserve. That reserve exists so the next surprise has somewhere to come out of. ' +
+      'Turning back with science undone is a successful EVA. There is no partial credit for a suit that ran out.',
+    tone: 'warning',
+  },
+
+  // --- Danger --------------------------------------------------------------
+  {
+    id: 'weather',
+    phases: ['surface'],
+    when: (s) => s.weather.kind !== 'clear' && s.weather.intensity > 0.25,
+    done: (s) => s.weather.kind === 'clear' && s.time.evaSec > 60,
+    title: 'Weather. It will not blow you over.',
+    body:
+      'At six millibars there is not enough air to push you. What a Martian storm takes is your sunlight, your ' +
+      'visibility and your landmarks, and it loads your seals and radiators with dust. It is a margin problem, ' +
+      'not a wind problem — so the answer is shelter or turn back, never endurance.',
+    tone: 'warning',
   },
   {
     id: 'station-reach',
@@ -160,31 +178,6 @@ export const HINTS: Hint[] = [
       'one-way light time for today’s actual planetary positions. Go back to work; the EVA does not wait for the feed.',
     tone: 'info',
   },
-
-  // --- Danger --------------------------------------------------------------
-  {
-    id: 'weather',
-    phases: ['surface'],
-    when: (s) => s.weather.kind !== 'clear' && s.weather.intensity > 0.25,
-    done: (s) => s.weather.kind === 'clear' && s.time.evaSec > 60,
-    title: 'Weather. It will not blow you over.',
-    body:
-      'At six millibars there is not enough air to push you. What a Martian storm takes is your sunlight, your ' +
-      'visibility and your landmarks, and it loads your seals and radiators with dust. It is a margin problem, ' +
-      'not a wind problem — so the answer is shelter or turn back, never endurance.',
-    tone: 'warning',
-  },
-  {
-    id: 'margin',
-    phases: ['surface'],
-    when: (s) => s.ret.status !== 'nominal' && !s.aborting,
-    done: (s) => s.aborting || !!s.outcome,
-    title: 'The reserve is not a resource',
-    body:
-      'Your margin has crossed into the reserve. That reserve exists so the next surprise has somewhere to come out of. ' +
-      'Turning back with science undone is a successful EVA. There is no partial credit for a suit that ran out.',
-    tone: 'warning',
-  },
   {
     id: 'ingress',
     phases: ['surface'],
@@ -196,6 +189,17 @@ export const HINTS: Hint[] = [
       'downlinked arrives whatever happens next. Or walk back out, if the margin still covers it.',
     key: 'Enter',
     tone: 'action',
+  },
+  {
+    id: 'surface-clock',
+    phases: ['surface'],
+    when: (s) => s.distanceWalkedM > 80 && !anyStationStarted(s),
+    done: (s) => anyStationStarted(s) || s.time.evaSec > 2400,
+    title: 'The clock is the enemy, not the terrain',
+    body:
+      'Oxygen, the CO₂ scrubber, battery and water are all draining, and the walk home gets longer with every step out. ' +
+      'The RETURN ESTIMATE on the left is the only number that decides whether this EVA ends well.',
+    tone: 'info',
   },
 ]
 

@@ -5,10 +5,15 @@ import { useStore } from '../state/store'
 import { linkGeometry, marsClock, formatHours, seasonName } from '../sim/orbits'
 import { SITE } from '../mission/site'
 import { formatDelay } from '../sim/comms'
+import { GALLERY } from '../data/nasaGallery'
+
+/** Four frames that say, without a word, what this is built on. */
+const PROOF = ['abrasionPatches', 'watsonDourbes', 'coreInDrill', 'deltaPano'] as const
 import { openDataPanel } from './dataPanelBus'
 
 export default function TitleScreen() {
   const startBriefing = useStore((s) => s.startBriefing)
+  const quickDemo = useStore((s) => s.quickDemo)
   const [, bump] = useState(0)
   const [showControls, setShowControls] = useState(false)
 
@@ -48,20 +53,48 @@ export default function TitleScreen() {
         style={{ padding: 'max(18px, env(safe-area-inset-top)) clamp(18px, 4vw, 54px) max(18px, env(safe-area-inset-bottom))', justifyContent: 'space-between' }}
       >
         {/* Top bar */}
-        <div className="row between wrap gap12" style={{ animation: 'fadeUp .5s ease-out' }}>
+        <div
+          className="row between wrap gap12"
+          style={{ position: 'relative', zIndex: 1, animation: 'fadeUp .5s ease-out' }}
+        >
           <div className="row gap12" style={{ alignItems: 'baseline' }}>
             <span className="label" style={{ color: 'var(--cyan)' }}>NASA Space Apps Challenge 2026</span>
             <span className="label">// Mission Computer v2.6</span>
           </div>
-          <div className="row gap8 wrap">
+          {/* Its own backing: this group sits over the bright limb of the
+              planet, where a ghost button simply disappears. */}
+          <div
+            className="row gap8 wrap"
+            style={{
+              background: 'rgba(4,7,11,0.62)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              padding: '4px 8px',
+            }}
+          >
             <Chip tone="nominal">Live ephemeris</Chip>
             <Chip tone="info">{SITE.name}</Chip>
             <button className="btn ghost sm" onClick={() => openDataPanel.open()}>Data details [K]</button>
           </div>
         </div>
 
+        {/*
+          A scrim behind the hero column. The Mars limb behind it is bright
+          enough on the right-hand side that small low-contrast text sat on top
+          of it was effectively unreadable. The gradient is horizontal so the
+          planet is still fully visible where there is nothing over it.
+        */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute', left: 0, top: 0, bottom: 0, width: 'min(96vw, 1080px)',
+            background: 'linear-gradient(90deg, rgba(4,7,11,0.86) 0%, rgba(4,7,11,0.74) 52%, rgba(4,7,11,0) 100%)',
+            pointerEvents: 'none',
+            zIndex: 0,
+          }}
+        />
+
         {/* Hero */}
-        <div style={{ maxWidth: 940, animation: 'glowIn .9s ease-out' }}>
+        <div style={{ maxWidth: 940, position: 'relative', zIndex: 1, animation: 'glowIn .9s ease-out' }}>
           <div className="label" style={{ letterSpacing: '0.42em', marginBottom: 8 }}>
             Jezero Crater &nbsp;/&nbsp; 18.44&deg;N 77.45&deg;E &nbsp;/&nbsp; &minus;2571 m
           </div>
@@ -103,7 +136,40 @@ export default function TitleScreen() {
             cannot answer in time.
           </p>
 
-          <div className="row gap12 wrap" style={{ marginTop: 26 }}>
+          {/* What you will actually be looking at. Real photographs, on the
+              first screen, because the single hardest thing to establish in
+              five seconds is that the NASA data here is not decoration. */}
+          <div style={{ marginTop: 22, maxWidth: 700 }}>
+            <div className="label" style={{ marginBottom: 6 }}>
+              Real NASA imagery, revealed by doing the work
+            </div>
+            <div className="row gap8 wrap">
+              {PROOF.map((k) => {
+                const im = GALLERY[k]
+                return (
+                  <figure key={k} style={{ margin: 0, width: 128 }}>
+                    <img
+                      src={im.file}
+                      alt={im.title}
+                      loading="lazy"
+                      style={{
+                        width: 128, height: 76, objectFit: 'cover', display: 'block',
+                        border: '1px solid var(--line)',
+                      }}
+                    />
+                    <figcaption
+                      className="mono"
+                      style={{ fontSize: 8.5, color: 'var(--muted)', marginTop: 2, lineHeight: 1.3 }}
+                    >
+                      {im.id} &middot; NASA/JPL
+                    </figcaption>
+                  </figure>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="row gap12 wrap" style={{ marginTop: 22 }}>
             <button
               className="btn primary"
               style={{ padding: '15px 34px', fontSize: 14, letterSpacing: '0.2em' }}
@@ -111,9 +177,26 @@ export default function TitleScreen() {
             >
               &#9656;&nbsp; Start Marswalk <span className="mono" style={{ fontSize: 10, opacity: 0.75 }}>[Enter]</span>
             </button>
+            <button
+              className="btn"
+              style={{ padding: '15px 22px' }}
+              onClick={quickDemo}
+              title="Skips planning and drops you on the surface, walking, with a storm on the way."
+            >
+              Two-minute demo &#8594;
+            </button>
             <button className="btn ghost" style={{ padding: '15px 22px' }} onClick={() => setShowControls((v) => !v)}>
               {showControls ? 'Hide controls' : 'Controls & mission rules [?]'}
             </button>
+          </div>
+
+          <div
+            className="src"
+            style={{ marginTop: 9, maxWidth: 640, lineHeight: 1.55, color: 'var(--muted)' }}
+          >
+            A full run is a briefing, a route plan and an EVA &mdash; about eight minutes.
+            The two-minute demo skips straight to the surface with auto-traverse walking and a
+            regional dust front already scheduled; press P at any time to take the controls.
           </div>
 
           {showControls && (

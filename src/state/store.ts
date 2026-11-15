@@ -330,6 +330,13 @@ export interface Actions {
   setEvaStart: (ltst: number) => void
   toggleHazardOverlay: () => void
   beginEva: (demo?: boolean) => void
+  /**
+   * The ninety-second path: straight to the surface, on the route that visits
+   * all three stations, with a storm guaranteed and auto-traverse already
+   * walking. It exists because a judge at a table will not reach the good part
+   * any other way, and the good part is the whole argument for this project.
+   */
+  quickDemo: () => void
   tick: (dtRealSec: number) => void
   setTimeScale: (s: number) => void
   togglePause: () => void
@@ -580,6 +587,19 @@ export const useStore = create<Store>((set, get) => ({
       get().pushLog('warning',
         'Solar conjunction geometry: Sun-Earth-Mars angle under 3°. Real missions suspend commanding in this window.')
     }
+  },
+
+  quickDemo: () => {
+    // Route A is the long southern loop that reaches all three stations, so it
+    // is the one that shows what the game actually contains.
+    get().selectRoute(ROUTES[0].id)
+    get().beginEva(true)
+    set({ autoTraverse: true, timeScale: 30 })
+    get().pushLog('info',
+      'DEMO RUN. Auto-traverse engaged and the clock compressed, so you can watch the EVA ' +
+      'rather than walk it. A regional dust front is scheduled. Everything else \u2014 the sol, ' +
+      'the season, the sun angle, the Earth light time \u2014 is the real right now. ' +
+      'Press P to take the controls back at any point.')
   },
 
   // -------------------------------------------------------------------------
