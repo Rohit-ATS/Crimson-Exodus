@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Starfield from './Starfield'
 import { Chip, KV, Meter, Panel, Tag } from './components/kit'
 import LocalMap from './map/LocalMap'
@@ -12,6 +12,7 @@ import { formatDelay } from '../sim/comms'
 import { formatBytes } from '../sim/downlink'
 import { LESSONS } from '../mission/activity'
 import { missionStatus } from '../mission/objectives'
+import { useSettings } from '../state/settings'
 
 export default function Debrief() {
   const s = useStore()
@@ -21,6 +22,9 @@ export default function Debrief() {
   const sci = useMemo(() => scienceScore(s), [s])
   const route = ROUTES.find((r) => r.id === s.routeId)!
   const mission = useMemo(() => missionStatus(s), [s])
+  const markRunComplete = useSettings((x) => x.markRunComplete)
+  // Reaching a debrief means this player has been all the way through once.
+  useEffect(() => { markRunComplete() }, [markRunComplete])
   const learned = s.lessons.map((id) => LESSONS[id]).filter(Boolean)
 
   const visited = useMemo(

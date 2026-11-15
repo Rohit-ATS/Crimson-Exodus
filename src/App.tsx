@@ -13,6 +13,7 @@ const Debrief = lazy(() => import('./ui/Debrief'))
 import DataPanel from './ui/panels/DataPanel'
 import { openDataPanel } from './ui/dataPanelBus'
 import ErrorBoundary from './ui/ErrorBoundary'
+import Coach from './ui/Coach'
 
 /**
  * A short wipe between phases. It hides the frame where a screen mounts and the
@@ -109,6 +110,10 @@ export default function App() {
           {phase === 'debrief' && <Debrief />}
         </Suspense>
       </ErrorBoundary>
+
+      {/* After the screens, so the card is never painted over by one of them.
+          The surface mounts its own copy inside the HUD column instead. */}
+      {(phase === 'briefing' || phase === 'planning') && <Coach placement="screen" />}
 
       {data && phase !== 'surface' && <DataPanel onClose={() => setData(false)} />}
 

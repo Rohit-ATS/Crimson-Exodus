@@ -203,6 +203,12 @@ export default function SettingsPanel() {
             on={st.hints}
             onChange={st.setHints}
           />
+          <div className="row between gap8" style={{ marginTop: -4 }}>
+            <span className="src">
+              {st.seenHints.length} card(s) already shown and retired.
+            </span>
+            <button className="btn sm ghost" onClick={st.resetHints}>Show them all again</button>
+          </div>
 
           <hr className="rule" />
 

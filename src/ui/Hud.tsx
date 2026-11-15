@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Chip, Meter } from './components/kit'
 import { missionStatus } from '../mission/objectives'
+import Coach from './Coach'
 import { useStore } from '../state/store'
 import { JACK_SUIT, CONSUMABLE_LABEL } from '../sim/consumables'
 import { formatHours, seasonName } from '../sim/orbits'
@@ -354,6 +355,7 @@ export default function Hud() {
           display: 'flex', flexDirection: 'column', alignItems: 'stretch',
         }}
       >
+        <Coach placement="surface" />
         <ObjectiveStrip />
         {/* Rolling log, in the same column so nothing overlaps */}
         <div className="stack gap4" style={{ marginBottom: 8, pointerEvents: 'none' }}>

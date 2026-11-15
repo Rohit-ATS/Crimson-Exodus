@@ -53,6 +53,9 @@ export interface Settings {
   hints: boolean
   /** True while the player has never completed a run. */
   firstRun: boolean
+  /** Guidance cards already seen or satisfied. Persisted, so a returning
+   *  player is never taught the same thing twice. */
+  seenHints: string[]
 }
 
 export interface SettingsActions {
@@ -64,6 +67,8 @@ export interface SettingsActions {
   setAudio: (v: boolean) => void
   setHints: (v: boolean) => void
   markRunComplete: () => void
+  markHintSeen: (ids: string[]) => void
+  resetHints: () => void
   /** Resolved tier, honouring a manual override. */
   tier: () => QualityTier
 }
@@ -92,6 +97,7 @@ function save(s: Settings) {
       audio: s.audio,
       hints: s.hints,
       firstRun: s.firstRun,
+      seenHints: s.seenHints,
     }))
   } catch { /* nothing we can do, and nothing that should break the game */ }
 }
@@ -116,6 +122,7 @@ export const useSettings = create<Settings & SettingsActions>((set, get) => ({
   audio: saved.audio ?? false,
   hints: saved.hints ?? true,
   firstRun: saved.firstRun ?? true,
+  seenHints: Array.isArray(saved.seenHints) ? saved.seenHints : [],
 
   setQuality: (quality) => { set({ quality }); save(get()) },
   setAutoTier: (autoTier) => set({ autoTier }),
@@ -125,6 +132,14 @@ export const useSettings = create<Settings & SettingsActions>((set, get) => ({
   setAudio: (audio) => { set({ audio }); save(get()) },
   setHints: (hints) => { set({ hints }); save(get()) },
   markRunComplete: () => { set({ firstRun: false }); save(get()) },
+  markHintSeen: (ids) => {
+    const cur = get().seenHints
+    const add = ids.filter((i) => !cur.includes(i))
+    if (!add.length) return
+    set({ seenHints: [...cur, ...add] })
+    save(get())
+  },
+  resetHints: () => { set({ seenHints: [], hints: true }); save(get()) },
 
   tier: () => {
     const s = get()
