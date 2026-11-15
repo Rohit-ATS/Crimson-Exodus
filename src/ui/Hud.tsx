@@ -449,6 +449,7 @@ export default function Hud() {
           <Key k="C" v="photo" />
           <Key k="B" v="backpack" />
           <Key k="M" v="map" />
+          <Key k="N" v="NASA site" />
           <Key k="H" v="hazard" />
           <Key k="T" v="comms" />
           <Key k="K" v="data" />

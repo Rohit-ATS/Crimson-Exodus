@@ -26,7 +26,7 @@ export function installInput(): () => void {
   /** Keys that open a panel. The character must not also land in a text field. */
   const SWALLOW = new Set([
     'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyF', 'KeyC', 'KeyG',
-    'KeyB', 'KeyM', 'KeyT', 'KeyK', 'KeyH', 'KeyV', 'KeyP', 'KeyR',
+    'KeyB', 'KeyM', 'KeyT', 'KeyK', 'KeyH', 'KeyV', 'KeyP', 'KeyR', 'KeyN',
     'Space', 'Enter', 'NumpadEnter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
   ])
 
