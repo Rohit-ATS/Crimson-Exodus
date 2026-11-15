@@ -3,6 +3,8 @@ import { Chip, Modal, Tag } from '../components/kit'
 import { useStore } from '../../state/store'
 import { PROVENANCE, STATIONS } from '../../mission/site'
 import { live } from '../../state/live'
+import { ROVER_IMAGES } from '../../data/realSite'
+import RoverImageCard from './RoverImageCard'
 
 /**
  * A schematic of the outcrop face, drawn so it actually carries the information
@@ -222,6 +224,15 @@ export default function SciencePanel() {
           <div className="note info" style={{ fontSize: 13 }}>
             <strong className="cy">Real feature:</strong> {st.realFeature}
           </div>
+
+          {(ROVER_IMAGES[st.id] ?? []).length > 0 && (
+            <div>
+              <div className="label" style={{ marginBottom: 4 }}>What the real outcrop looks like &mdash; Perseverance</div>
+              <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+                {ROVER_IMAGES[st.id].map((im) => <RoverImageCard key={im.id} image={im} />)}
+              </div>
+            </div>
+          )}
 
           <div>
             <div className="label" style={{ marginBottom: 4 }}>Game assumptions at this station</div>

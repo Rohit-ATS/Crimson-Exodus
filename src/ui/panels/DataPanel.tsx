@@ -22,8 +22,9 @@ export default function DataPanel({ onClose }: { onClose: () => void }) {
         orbital basemap it can fetch is around 326 m per pixel; the whole traverse area is a
         few pixels across on it. Nothing at that resolution &mdash; and in truth, nothing at any
         orbital resolution &mdash; can certify that a human can safely place a boot on a given
-        square metre of Mars. The terrain you walk here is synthetic. The hazard shading is a
-        planning cue. The suit is a game mechanic.
+        square metre of Mars. The terrain you walk here is synthetic; the real-site map (N, or
+        from the planner) shows the real ground at traverse scale from the HiRISE elevation model
+        and imagery. The hazard shading is a planning cue. The suit is a game mechanic.
       </div>
 
       <div className="stack gap10" style={{ marginBottom: 16 }}>
@@ -89,8 +90,9 @@ export default function DataPanel({ onClose }: { onClose: () => void }) {
       <p style={{ fontSize: 13 }}>
         This project was built with AI assistance (Anthropic Claude) for code authoring,
         simulation design and copy. No AI-generated images, video or audio are used anywhere in
-        the app. Every visual asset is either (a) live NASA Mars Trek tile imagery, credited on
-        the image itself, or (b) generated procedurally at runtime by the code in this
+        the app. Every visual asset is either (a) NASA imagery &mdash; live Mars Trek tiles, the
+        CRISM browse map and Perseverance photographs &mdash; credited on the image itself, or
+        (b) generated procedurally at runtime by the code in this
         repository &mdash; the terrain, the astronaut, the lander, the sky and the dust are all
         geometry and shaders, not generated art. National flag images are fetched from
         flagcdn.com. There is therefore no AI-generated imagery requiring a watermark.
@@ -106,6 +108,9 @@ export default function DataPanel({ onClose }: { onClose: () => void }) {
         <li><a href="https://www.uahirise.org/" target="_blank" rel="noreferrer">HiRISE</a> &mdash; the resolution limit discussed above</li>
         <li><a href="https://doi.org/10.1126/science.1244797" target="_blank" rel="noreferrer">Hassler et al. 2014, Curiosity RAD</a> &mdash; the surface radiation environment</li>
         <li><a href="https://www.nasa.gov/missions/maven/nasa-watches-mars-light-up-during-epic-solar-storm/" target="_blank" rel="noreferrer">NASA, May 2024 solar storm at Mars</a> &mdash; the 8.1 mGy RAD surface dose the SEP event is scaled to</li>
+        <li><a href="https://doi.org/10.5066/P9REJ9JN" target="_blank" rel="noreferrer">Fergason et al. 2020, USGS</a> &mdash; Mars 2020 HiRISE DTM and orthomosaic of Jezero</li>
+        <li><a href="https://pds-geosciences.wustl.edu/" target="_blank" rel="noreferrer">PDS Geosciences Node</a> &mdash; CRISM observation FRT00005C5E</li>
+        <li><a href="https://science.nasa.gov/photojournal/" target="_blank" rel="noreferrer">NASA Photojournal</a> &mdash; Perseverance images PIA24802, PIA24814, PIA25672, PIA26368, PIA24816, PIA25023; CRISM map PIA23380</li>
       </ul>
     </Modal>
   )

@@ -13,6 +13,8 @@ import { environment } from '../sim/mars'
 import { solarIrradiance, sunTimes } from '../sim/orbits'
 import { SITE } from '../mission/site'
 import { openDataPanel } from './dataPanelBus'
+import RealSitePanel from './panels/RealSitePanel'
+import { ROVER_IMAGES } from '../data/realSite'
 
 export default function Planning() {
   const routeId = useStore((s) => s.routeId)
@@ -28,6 +30,7 @@ export default function Planning() {
   const [layer, setLayer] = useState<LayerId>('relief')
   const [product, setProduct] = useState<TrekProductId>('viking')
   const [trekState, setTrekState] = useState<LoadState>('loading')
+  const [showReal, setShowReal] = useState(false)
   const [hover, setHover] = useState<{ x: number; z: number; h: number; slope: number; rough: number } | null>(null)
   const [mapSize, setMapSize] = useState(560)
 
@@ -336,6 +339,24 @@ export default function Planning() {
 
         {/* ---- Right: NASA data and the budget ------------------------- */}
         <div className="stack gap12 scroll" style={{ width: 374, flex: '0 0 374px' }}>
+          <Panel title="Real site — NASA data at boot scale" right={<Tag kind="real" />}>
+            <button
+              className="block"
+              onClick={() => setShowReal(true)}
+              style={{ padding: 0, border: '1px solid var(--line)', background: 'none', position: 'relative', width: '100%', cursor: 'pointer' }}
+              aria-label="Open the real-site map"
+            >
+              <img src={ROVER_IMAGES.kodiak[0].file} alt="Kodiak butte, Perseverance Mastcam-Z" style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }} />
+              <span className="mono" style={{ position: 'absolute', right: 0, bottom: 0, fontSize: 9, padding: '2px 5px', background: 'rgba(5,8,13,0.78)', color: '#e8eef5' }}>PIA24802 &middot; NASA/JPL-Caltech/ASU/MSSS</span>
+            </button>
+            <p style={{ fontSize: 12.5, marginTop: 8 }}>
+              The real ground this EVA is modelled on: HiRISE 25 cm imagery, the 1 m HiRISE elevation
+              model Perseverance landed with, slope, a CRISM mineral layer and Perseverance&apos;s own
+              traverse. Plan a route on real terrain and see its true length, climb and steepest slope.
+            </p>
+            <button className="btn primary sm block" onClick={() => setShowReal(true)}>Open real-site map &rarr;</button>
+          </Panel>
+
           <Panel
             title="NASA orbital context"
             right={
@@ -367,8 +388,9 @@ export default function Planning() {
               Look at the orange box. That is the whole traverse at true scale on the best
               global basemap this app can fetch &mdash; a few pixels across. Orbital data gives you
               the crater, the delta and the regional elevation. It cannot tell you where to put
-              your feet. That is why the traverse map beside it is labelled synthetic instead
-              of pretending to be a NASA product.
+              your feet. The real-site map above is the answer: HiRISE data at traverse scale. The
+              walkable traverse map beside it is labelled synthetic because it is shaped to that
+              site, not resampled from it.
             </div>
             <div className="src" style={{ marginTop: 6 }}>
               Tiles: <a href="https://trek.nasa.gov/mars/" target="_blank" rel="noreferrer">NASA Mars Trek</a> &middot; <Tag kind="real" />
@@ -420,6 +442,8 @@ export default function Planning() {
           </Panel>
         </div>
       </div>
+
+      {showReal && <RealSitePanel onClose={() => setShowReal(false)} />}
 
       {/* Footer */}
       <div className="row between gap12 wrap" style={{ padding: '12px 18px', borderTop: '1px solid var(--line-soft)' }}>

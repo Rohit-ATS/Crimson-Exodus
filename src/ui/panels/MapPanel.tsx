@@ -36,6 +36,7 @@ export default function MapPanel() {
           </button>
         ))}
         <div className="grow" />
+        <button className="btn sm primary" onClick={() => s.setUi('realsite')}>Real site: HiRISE + DTM [N]</button>
         <Chip tone={s.weather.kind === 'clear' ? 'nominal' : s.weather.advisesAbort ? 'critical' : 'caution'}>
           {s.weather.headline}
         </Chip>

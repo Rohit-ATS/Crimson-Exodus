@@ -7,6 +7,7 @@ import BackpackPanel from './panels/BackpackPanel'
 import CommsPanel from './panels/CommsPanel'
 import DataPanel from './panels/DataPanel'
 import MapPanel from './panels/MapPanel'
+import RealSitePanel from './panels/RealSitePanel'
 import { useStore } from '../state/store'
 import { useSimLoop } from '../state/useSimLoop'
 import { installInput, onPress } from '../state/input'
@@ -47,6 +48,7 @@ export default function Surface() {
         case 'KeyM': s.setUi('map'); break
         case 'KeyT': s.setUi('comms'); break
         case 'KeyK': s.setUi('data'); break
+        case 'KeyN': s.setUi('realsite'); break
         case 'KeyH': s.toggleHazardOverlay(); break
         case 'KeyV': live.firstPerson = !live.firstPerson; break
         case 'KeyP': s.toggleAutoTraverse(); break
@@ -122,6 +124,7 @@ export default function Surface() {
       {ui === 'backpack' && <BackpackPanel />}
       {ui === 'comms' && <CommsPanel />}
       {ui === 'map' && <MapPanel />}
+      {ui === 'realsite' && <RealSitePanel onClose={() => useStore.getState().setUi(null)} />}
       {ui === 'data' && <DataPanel onClose={() => useStore.getState().setUi(null)} />}
     </div>
   )

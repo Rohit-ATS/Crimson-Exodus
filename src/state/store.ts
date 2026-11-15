@@ -102,7 +102,7 @@ export interface LogEntry {
   text: string
 }
 
-export type UiPanel = null | 'comms' | 'backpack' | 'science' | 'flag' | 'data' | 'rules' | 'map'
+export type UiPanel = null | 'comms' | 'backpack' | 'science' | 'flag' | 'data' | 'rules' | 'map' | 'realsite'
 
 export type OutcomeCode =
   | 'returned-nominal'

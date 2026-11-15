@@ -8,6 +8,8 @@ import { ARMSTRONG_LIMIT_PA, ATMOSPHERE_COMPOSITION, MARS_G, thinnerThanEarth } 
 import { formatDelay } from '../sim/comms'
 import { seasonName } from '../sim/orbits'
 import { openDataPanel } from './dataPanelBus'
+import { ROVER_IMAGES } from '../data/realSite'
+import RoverImageCard from './panels/RoverImageCard'
 
 export default function Briefing() {
   const openPlanning = useStore((s) => s.openPlanning)
@@ -102,6 +104,11 @@ export default function Briefing() {
                     </div>
                     <div style={{ fontSize: 13.5 }}>{st.name} &mdash; {st.tagline}</div>
                     <div className="src" style={{ marginTop: 2 }}>modelled on: {st.realFeature}</div>
+                    {ROVER_IMAGES[st.id]?.[0] && (
+                      <div style={{ marginTop: 5, maxWidth: 360 }}>
+                        <RoverImageCard image={ROVER_IMAGES[st.id][0]} compact />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

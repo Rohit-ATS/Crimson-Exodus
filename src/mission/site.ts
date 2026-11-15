@@ -99,6 +99,42 @@ export const PROVENANCE: Provenance[] = [
     kind: 'in-situ',
   },
   {
+    id: 'hirise-dtm',
+    label: 'HiRISE digital terrain model (real-site map)',
+    instrument: 'HiRISE stereo, MRO',
+    source: 'USGS Astrogeology, Mars 2020 Terrain Relative Navigation products (Fergason et al. 2020)',
+    date: 'Released 2020; the elevation model Perseverance landed with',
+    resolution: '1 m/post native; bundled here as a 3.65 × 2.49 km window averaged to 4 m posts',
+    url: 'https://doi.org/10.5066/P9REJ9JN',
+    caveat:
+      'Real measured elevation of the landing site, Séítah, Kodiak and the delta front, used for the real-site map\'s hillshade, elevation, slope, route length, climb and profile. At 4 m posts it resolves scarps, butte flanks and ripple fields, not individual boulders. The 3D walk does not use it; it uses the synthetic field shaped to this site.',
+    kind: 'topography',
+  },
+  {
+    id: 'crism',
+    label: 'CRISM carbonate browse map',
+    instrument: 'Compact Reconnaissance Imaging Spectrometer for Mars (CRISM)',
+    source: 'MRO, observation FRT00005C5E, MTRDR browse product CAR, via PDS Geosciences Node',
+    date: '19 May 2007',
+    resolution: '~18 m/pixel, map-projected per the PDS label',
+    url: 'https://pds-geosciences.wustl.edu/mro/mro-m-crism-5-rdr-mptargeted-v1/mrocr_4001/browse/2007/2007_139/frt00005c5e/',
+    caveat:
+      'A spectral-parameter browse image, not a mineral identification: colours indicate where carbonate or hydrated-mineral absorptions are likely. Inside the traverse window the signal is weak; the strongest carbonate signal in this observation lies about 8 km north-west.',
+    kind: 'imagery',
+  },
+  {
+    id: 'm20-traverse',
+    label: 'Perseverance traverse and outcrop images',
+    instrument: 'Rover localization; Mastcam-Z; WATSON (SHERLOC)',
+    source: 'NASA/JPL-Caltech, Mars 2020 waypoints and NASA Photojournal',
+    date: 'Sols 13–714 (traverse); 2021–2024 (images)',
+    resolution: 'Localized rover positions; images credited individually',
+    url: 'https://science.nasa.gov/mission/mars-2020-perseverance/',
+    caveat:
+      'The dashed track on the real-site map is where Perseverance actually drove. The station photographs are real images of the real outcrops each station is modelled on, each with its PIA number and credit; they are historical observations, not views of this EVA.',
+    kind: 'in-situ',
+  },
+  {
     id: 'rad',
     label: 'Surface radiation dose',
     instrument: 'Radiation Assessment Detector (RAD)',
