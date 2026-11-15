@@ -37,11 +37,55 @@ import {
   ADVISORIES, OUTGOING, advisory, transmit,
   type CommsMessage, type OutgoingTemplate, type ReplyContext,
 } from '../sim/comms'
+import {
+  abradeActivity, activeBeat, cacheActivity, coreActivity, flagActivity,
+  lensActivity, photoActivity, recordActivity, shelterActivity,
+  type ActivityDef,
+} from '../mission/activity'
 import { live, resetLive } from './live'
 import { input } from './input'
 import { findCountry } from '../data/countries'
 
 export type Phase = 'title' | 'briefing' | 'planning' | 'surface' | 'debrief'
+
+/**
+ * What a running procedure will apply to the mission when it finishes.
+ *
+ * Procedures are animated and take real seconds to play, during which the
+ * mission clock runs compressed so the full minute cost is actually charged.
+ * Nothing is committed until the procedure completes, so an abort mid-procedure
+ * costs the time spent and gains nothing — which is how it works in the field.
+ */
+export type ProcCommit =
+  | { type: 'abrade'; stationId: string }
+  | { type: 'lens'; stationId: string }
+  | { type: 'record'; stationId: string; choiceId: string }
+  | { type: 'core'; stationId: string }
+  | { type: 'photo'; label: string; dataUrl?: string }
+  | { type: 'flag'; code: string }
+  | { type: 'cache'; cacheId: string }
+  | { type: 'shelter' }
+
+export interface ProcRun {
+  def: ActivityDef
+  commit: ProcCommit
+  /** 0-1 through the procedure. */
+  progress: number
+  /** Real seconds elapsed. */
+  elapsed: number
+  /** True once the work is done and the result card is showing. */
+  complete: boolean
+  /** Time scale to restore when the procedure ends. */
+  prevTimeScale: number
+  /** EVA seconds when it started, so the card can show what it cost. */
+  startEvaSec: number
+  /** Snapshot of consumable fractions at the start, for the cost readout. */
+  startFrac: { o2: number; battery: number; scrubber: number }
+  /** Beat index that has been narrated into the log already. */
+  narrated: number
+  /** Panel to reopen when the result card is dismissed. */
+  returnUi: UiPanel
+}
 
 export interface StationState {
   reached: boolean
@@ -207,6 +251,10 @@ export interface State {
   samples: Sample[]
   flag: FlagPlant | null
   flagsRemaining: number
+  /** The procedure currently playing, if any. */
+  proc: ProcRun | null
+  /** Ids of survival lessons the player has reached, in the order they got them. */
+  lessons: string[]
   // --- comms ---
   messages: CommsMessage[]
   sentAdvisories: string[]
@@ -249,6 +297,23 @@ export interface Actions {
   collectSample: (stationId: string) => void
   takePhoto: (label: string, dataUrl?: string) => void
   plantFlag: (code: string) => void
+  // --- procedures: the animated form of every action above -----------------
+  /** Start an animated procedure. Nothing is committed until it completes. */
+  startProcedure: (def: ActivityDef, commit: ProcCommit) => void
+  /** Advance the running procedure. Called from the sim tick with real seconds. */
+  tickProcedure: (dtRealSec: number) => void
+  /** Dismiss the result card and hand control back. */
+  dismissProcedure: () => void
+  // Each of these builds the right procedure for the current situation and
+  // starts it. The UI never assembles a procedure itself.
+  beginAbrade: (stationId: string) => void
+  beginLens: (stationId: string) => void
+  beginRecord: (stationId: string, choiceId: string) => void
+  beginCore: (stationId: string) => void
+  beginPhoto: (label: string, dataUrl?: string) => void
+  beginFlag: (code: string) => void
+  beginCache: () => void
+  beginShelter: () => void
   sendMessage: (templateId: string) => void
   finishEva: (code?: OutcomeCode) => void
   restart: () => void
@@ -355,6 +420,8 @@ function initialState(seed = Math.floor(Math.random() * 1e9)): State {
     samples: [],
     flag: null,
     flagsRemaining: 1,
+    proc: null,
+    lessons: [],
     messages: [],
     sentAdvisories: [],
     log: [],
@@ -425,6 +492,7 @@ export const useStore = create<Store>((set, get) => ({
       jackX: 0, jackZ: 26, jackHeading: live.jack.heading,
       stations: freshStations(),
       photos: [], samples: [], flag: null, flagsRemaining: 1, cachesUsed: [], nearCache: null,
+      proc: null, lessons: [],
       messages: [], sentAdvisories: [], log: [],
       aborting: false, sheltering: false, outcome: null,
       distanceWalkedM: 0, maxRangeReachedM: 0,
@@ -740,8 +808,13 @@ export const useStore = create<Store>((set, get) => ({
       log: newLog.length ? [...s.log, ...newLog] : s.log,
     })
 
+    // --- the running procedure, advanced on real time ---------------------
+    // Done last so it sees the sim state this tick produced, and so the
+    // commit it may apply is not overwritten by the set above.
+    if (s.proc) get().tickProcedure(dt)
+
     if (home && s.aborting) get().finishEva()
-    else if (home && evaSec > 120 && allWorkDone(get())) get().finishEva()
+    else if (home && evaSec > 120 && allWorkDone(get()) && !get().proc) get().finishEva()
   },
 
   setTimeScale: (t) => set({ timeScale: t }),
@@ -780,7 +853,6 @@ export const useStore = create<Store>((set, get) => ({
       // Opening the suit's service panels in a dust-laden environment does not help.
       dustFouling: Math.min(1, s.cons.dustFouling + 0.05),
     }
-    live.jack.working = cache.swapMinutes * 60
     live.jack.tool = 'none'
     set({ cons, frac: fractions(JACK_SUIT, cons), cachesUsed: [...s.cachesUsed, cache.id] })
     get().pushLog('decision',
@@ -822,8 +894,6 @@ export const useStore = create<Store>((set, get) => ({
     const s = get()
     const st = STATION_BY_ID(stationId)
     if (s.stations[stationId].abraded) return
-    live.jack.working = st.abradeMinutes * 60
-    live.jack.tool = 'brush'
     set({ stations: { ...s.stations, [stationId]: { ...s.stations[stationId], abraded: true } } })
     get().pushLog('science',
       `${st.codename}: abraded patch cut, ${st.abradeMinutes} min. ${st.abradeReveal}`)
@@ -834,8 +904,6 @@ export const useStore = create<Store>((set, get) => ({
     const st = STATION_BY_ID(stationId)
     const state = s.stations[stationId]
     if (state.inspected) return
-    live.jack.working = st.lensMinutes * 60
-    live.jack.tool = 'lens'
     set({ stations: { ...s.stations, [stationId]: { ...state, inspected: true } } })
     get().pushLog('science',
       `${st.codename}: hand lens on ${state.abraded ? 'the abraded patch' : 'the weathered outside'}, ${st.lensMinutes} min. ` +
@@ -856,8 +924,6 @@ export const useStore = create<Store>((set, get) => ({
       ...s.stations,
       [stationId]: { ...state, choice: choiceId, choiceConfident: confident },
     }
-    live.jack.working = st.workMinutes * 60 * 0.3
-    live.jack.tool = 'none'
     set({ stations })
     get().pushLog('science',
       `${st.codename}: recorded "${opt.text}" — ${opt.supported ? 'SUPPORTED by the published observations' : 'NOT supported'}. ${opt.feedback}` +
@@ -883,8 +949,6 @@ export const useStore = create<Store>((set, get) => ({
       massG: 14 + Math.round(Math.random() * 6),
       contextGood,
     }
-    live.jack.working = st.workMinutes * 60 * 0.55
-    live.jack.tool = 'drill'
     set({
       samples: [...s.samples, sample],
       stations: { ...s.stations, [stationId]: { ...s.stations[stationId], sampled: true } },
@@ -935,8 +999,6 @@ export const useStore = create<Store>((set, get) => ({
     }
     const stations = { ...s.stations }
     if (s.nearStation) stations[s.nearStation] = { ...stations[s.nearStation], flagPlanted: true }
-    live.jack.working = 70
-    live.jack.tool = 'flag'
     set({ flag: plant, flagsRemaining: s.flagsRemaining - 1, stations })
     get().pushLog('science',
       `Flag emplaced: ${c.name}. Commemorative only — Outer Space Treaty Article II means this is not a territorial claim.`)
@@ -953,6 +1015,162 @@ export const useStore = create<Store>((set, get) => ({
     get().pushLog('comms',
       `DOWNLINK: ${tpl.subject}. Reaches Earth in ${(s.link.owltSec / 60).toFixed(1)} min. ` +
       `Earliest possible reply lands at EVA +${((s.time.evaSec + 2 * s.link.owltSec + tpl.earthThinkSec) / 60).toFixed(0)} min.`)
+  },
+
+  // -------------------------------------------------------------------------
+  // Procedures. Every player action that costs mission time runs through here
+  // so that it is shown being done rather than silently applied.
+  // -------------------------------------------------------------------------
+
+  startProcedure: (def, commit) => {
+    const s = get()
+    if (s.proc || s.outcome) return
+    // The full minute cost is charged while the animation plays: the mission
+    // clock is compressed so that `def.minutes` of mission time really do pass
+    // in `def.realSec` of the player's time. The compression factor is shown on
+    // screen, so the player can see the clock is not being given to them free.
+    const scale = Math.max(1, (def.minutes * 60) / def.realSec)
+    live.jack.working = def.minutes * 60
+    live.jack.tool = def.tool
+    live.inputLocked = true
+    set({
+      ui: null,
+      autoTraverse: false,
+      timeScale: scale,
+      proc: {
+        def,
+        commit,
+        progress: 0,
+        elapsed: 0,
+        complete: false,
+        prevTimeScale: s.timeScale,
+        startEvaSec: s.time.evaSec,
+        startFrac: { o2: s.frac.o2, battery: s.frac.battery, scrubber: s.frac.scrubber },
+        narrated: -1,
+        returnUi: s.ui,
+      },
+    })
+    get().pushLog('science',
+      `PROCEDURE START \u2014 ${def.title}. ${def.subtitle}. Budgeted ${def.minutes} min of mission time.`)
+  },
+
+  tickProcedure: (dtRealSec) => {
+    const s = get()
+    const p = s.proc
+    if (!p || p.complete) return
+
+    const elapsed = p.elapsed + dtRealSec
+    const progress = Math.min(1, elapsed / p.def.realSec)
+
+    // Narrate each beat into the mission log as it happens, so the log reads
+    // like a real voice loop afterwards instead of a list of outcomes.
+    let narrated = p.narrated
+    const bi = activeBeat(p.def, progress)
+    if (bi > narrated) {
+      narrated = bi
+      const b = p.def.beats[bi]
+      get().pushLog('science', `${p.def.title}: ${b.label}. ${b.detail}`)
+    }
+
+    if (progress < 1) {
+      set({ proc: { ...p, elapsed, progress, narrated } })
+      return
+    }
+
+    // --- the procedure finished: restore the clock, then commit ------------
+    live.jack.working = 0
+    live.jack.tool = 'none'
+    set({
+      timeScale: p.prevTimeScale,
+      proc: { ...p, elapsed, progress: 1, complete: true, narrated },
+    })
+
+    const c = p.commit
+    switch (c.type) {
+      case 'abrade': get().abradeStation(c.stationId); break
+      case 'lens': get().inspectStation(c.stationId); break
+      case 'record': get().recordObservation(c.stationId, c.choiceId); break
+      case 'core': get().collectSample(c.stationId); break
+      case 'photo': get().takePhoto(c.label, c.dataUrl); break
+      case 'flag': get().plantFlag(c.code); break
+      case 'cache': get().useCache(); break
+      case 'shelter': get().setSheltering(true); break
+    }
+
+    const lid = p.def.lesson.id
+    if (!get().lessons.includes(lid)) set({ lessons: [...get().lessons, lid] })
+  },
+
+  beginAbrade: (stationId) => {
+    const st = STATION_BY_ID(stationId)
+    if (get().stations[stationId].abraded) return
+    get().startProcedure(abradeActivity(st), { type: 'abrade', stationId })
+  },
+
+  beginLens: (stationId) => {
+    const st = STATION_BY_ID(stationId)
+    const state = get().stations[stationId]
+    if (state.inspected) return
+    get().startProcedure(lensActivity(st, state.abraded), { type: 'lens', stationId })
+  },
+
+  beginRecord: (stationId, choiceId) => {
+    const st = STATION_BY_ID(stationId)
+    const state = get().stations[stationId]
+    if (state.choice) return
+    get().startProcedure(
+      recordActivity(st, state.abraded && state.inspected),
+      { type: 'record', stationId, choiceId },
+    )
+  },
+
+  beginCore: (stationId) => {
+    const st = STATION_BY_ID(stationId)
+    const s = get()
+    if (!st.sampleable || s.stations[stationId].sampled || s.samples.length >= 4) return
+    get().startProcedure(coreActivity(st), { type: 'core', stationId })
+  },
+
+  beginPhoto: (label, dataUrl) => {
+    if (get().proc) return
+    get().startProcedure(photoActivity(label), { type: 'photo', label, dataUrl })
+  },
+
+  beginFlag: (code) => {
+    const s = get()
+    if (s.flagsRemaining <= 0) return
+    const c = findCountry(code)
+    if (!c) return
+    get().startProcedure(flagActivity(c.name), { type: 'flag', code })
+  },
+
+  beginCache: () => {
+    const s = get()
+    const cache = CACHES.find((c) => c.id === s.nearCache)
+    if (!cache || s.cachesUsed.includes(cache.id)) return
+    get().startProcedure(cacheActivity(cache.name, cache.swapMinutes), { type: 'cache', cacheId: cache.id })
+  },
+
+  beginShelter: () => {
+    const s = get()
+    if (s.sheltering || s.proc) return
+    get().startProcedure(shelterActivity(s.advice?.shelter.name ?? 'local terrain'), { type: 'shelter' })
+  },
+
+  dismissProcedure: () => {
+    const p = get().proc
+    if (!p) return
+    if (!p.complete) {
+      // Walking away part-way through costs the time already spent and gains
+      // nothing, which is exactly what happens in the field.
+      get().pushLog('warning',
+        `${p.def.title} abandoned at ${(p.progress * 100).toFixed(0)}% after ` +
+        `${((get().time.evaSec - p.startEvaSec) / 60).toFixed(1)} min. Nothing recorded.`)
+    }
+    live.jack.working = 0
+    live.jack.tool = 'none'
+    live.inputLocked = p.returnUi !== null
+    set({ proc: null, ui: p.returnUi, timeScale: p.prevTimeScale })
   },
 
   finishEva: (code) => {

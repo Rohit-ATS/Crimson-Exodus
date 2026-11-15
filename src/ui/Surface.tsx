@@ -8,6 +8,7 @@ import CommsPanel from './panels/CommsPanel'
 import DataPanel from './panels/DataPanel'
 import MapPanel from './panels/MapPanel'
 import RealSitePanel from './panels/RealSitePanel'
+import ProcedureOverlay from './ProcedureOverlay'
 import { useStore } from '../state/store'
 import { useSimLoop } from '../state/useSimLoop'
 import { installInput, onPress } from '../state/input'
@@ -22,6 +23,9 @@ export default function Surface() {
   useEffect(() => {
     return onPress((code) => {
       const s = useStore.getState()
+      // A running procedure owns the keyboard; ProcedureOverlay handles its own
+      // Escape and Enter so that nothing else can fire underneath it.
+      if (s.proc) return
       if (code === 'Escape') { s.setUi(null); return }
       if (s.ui !== null) return // panels own the keyboard while open
 
@@ -31,14 +35,14 @@ export default function Surface() {
           if (s.atLander) s.ingress()
           break
         case 'KeyR':
-          if (s.nearCache) s.useCache()
+          if (s.nearCache) s.beginCache()
           break
         case 'KeyF':
           if (s.nearStation) s.setUi('science')
           break
         case 'KeyC': {
           const url = live.captureFrame?.()
-          s.takePhoto(s.nearStation ? `${s.nearStation.toUpperCase()} frame` : 'Traverse frame', url)
+          s.beginPhoto(s.nearStation ? `${s.nearStation.toUpperCase()} frame` : 'Traverse frame', url)
           break
         }
         case 'KeyG':
@@ -126,6 +130,7 @@ export default function Surface() {
       {ui === 'map' && <MapPanel />}
       {ui === 'realsite' && <RealSitePanel onClose={() => useStore.getState().setUi(null)} />}
       {ui === 'data' && <DataPanel onClose={() => useStore.getState().setUi(null)} />}
+      <ProcedureOverlay />
     </div>
   )
 }

@@ -332,7 +332,7 @@ export default function Hud() {
           </button>
           <button
             className={`btn sm ${s.sheltering ? 'on' : 'ghost'}`}
-            onClick={() => s.setSheltering(!s.sheltering)}
+            onClick={() => (s.sheltering ? s.setSheltering(false) : s.beginShelter())}
           >
             {s.sheltering ? 'SHELTERING' : 'SHELTER IN PLACE'}
           </button>
@@ -417,7 +417,7 @@ export default function Hud() {
             </div>
             <div style={{ fontSize: 13, margin: '3px 0 6px' }}>{cache.why}</div>
             <div className="row gap6 center wrap">
-              <button className="btn sm primary" onClick={s.useCache}>Swap consumables [R]</button>
+              <button className="btn sm primary" onClick={s.beginCache}>Swap consumables [R]</button>
               <span className="src">single use &middot; costs {cache.swapMinutes} min of clock</span>
             </div>
           </div>

@@ -249,7 +249,7 @@ export default function SciencePanel() {
               className="btn ghost"
               onClick={() => {
                 const url = live.captureFrame?.()
-                s.takePhoto(`${st.codename} context frame`, url)
+                s.beginPhoto(`${st.codename} context frame`, url)
               }}
             >
               Capture a frame [C]
@@ -270,7 +270,7 @@ export default function SciencePanel() {
               done={state.abraded}
               minutes={st.abradeMinutes}
               action="Brush & abrade"
-              onDo={state.abraded ? undefined : () => s.abradeStation(st.id)}
+              onDo={state.abraded ? undefined : () => s.beginAbrade(st.id)}
               blurb="Every rock on Mars wears a dust coating over an oxidised rind. Cut a patch down to fresh rock before you believe anything you see."
               reveal={state.abraded ? st.abradeReveal : null}
             />
@@ -281,7 +281,7 @@ export default function SciencePanel() {
               done={state.inspected}
               minutes={st.lensMinutes}
               action="Inspect"
-              onDo={state.inspected ? undefined : () => s.inspectStation(st.id)}
+              onDo={state.inspected ? undefined : () => s.beginLens(st.id)}
               warn={!state.abraded && !state.inspected ? 'Not abraded yet \u2014 little will resolve through the rind.' : undefined}
               blurb="Close inspection of the prepared surface. Grain size, sorting, cement and crystal habit are decided here."
               reveal={state.inspected ? (state.abraded ? st.lensReveal : 'Through the dust coating and the oxidised rind, very little resolved.') : null}
@@ -308,7 +308,7 @@ export default function SciencePanel() {
               minutes={Math.round(st.workMinutes * 0.55)}
               action={st.sampleable ? `Core \u2014 ${st.sampleName}` : 'Not sampleable'}
               onDo={st.sampleable && !state.sampled && s.samples.length < 4
-                ? () => s.collectSample(st.id)
+                ? () => s.beginCore(st.id)
                 : undefined}
               blurb="The one thing a human on the surface can do that no orbiter can."
               reveal={null}
@@ -332,7 +332,7 @@ export default function SciencePanel() {
                       padding: '11px 13px', fontFamily: 'var(--body)', fontSize: 14,
                       letterSpacing: 0, textTransform: 'none', fontWeight: 400, lineHeight: 1.45,
                     }}
-                    onClick={() => s.recordObservation(st.id, o.id)}
+                    onClick={() => s.beginRecord(st.id, o.id)}
                   >
                     {o.text}
                   </button>
@@ -378,7 +378,7 @@ export default function SciencePanel() {
               className="btn"
               onClick={() => {
                 const url = live.captureFrame?.()
-                s.takePhoto(`${st.codename} ${state.choice ? 'documentation' : 'context'} frame`, url)
+                s.beginPhoto(`${st.codename} ${state.choice ? 'documentation' : 'context'} frame`, url)
               }}
             >
               Capture a frame [C]

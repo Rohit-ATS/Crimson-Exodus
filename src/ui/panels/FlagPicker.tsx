@@ -28,7 +28,7 @@ export default function FlagPicker() {
 
   const plant = () => {
     if (!sel) return
-    s.plantFlag(sel.code)
+    s.beginFlag(sel.code)
     s.setUi(null)
   }
 
