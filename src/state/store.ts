@@ -48,6 +48,7 @@ import {
   type UplinkItem,
 } from '../sim/downlink'
 import { live, resetLive } from './live'
+import { installDebugGlobals, type DebugGlobalTarget } from './debugGlobals'
 import { input } from './input'
 import { findCountry } from '../data/countries'
 
@@ -1735,15 +1736,8 @@ export { dustSeasonFactor, seasonName, sunTimes }
 /**
  * Development hook.
  *
- * Exposes the store on `window.__jack` under `vite dev` only, so that the
- * project's own browser-driven tests can set up a mid-EVA situation (a worked
- * station, a storm in progress) without walking half a kilometre first. It is
- * stripped from production builds by the `import.meta.env.DEV` guard.
+ * Browser-driven tests may explicitly expose the store with
+ * `VITE_ENABLE_DEBUG_GLOBALS=true`. Normal development and every production
+ * build leave the page globals untouched.
  */
-if (import.meta.env.DEV) {
-  const w = window as unknown as { __jack?: unknown; __live?: unknown }
-  w.__jack = useStore
-  // The camera and Jack's transform live outside React, so a test that wants a
-  // deterministic viewpoint needs this too.
-  w.__live = live
-}
+installDebugGlobals(import.meta.env, window as unknown as DebugGlobalTarget, useStore, live)

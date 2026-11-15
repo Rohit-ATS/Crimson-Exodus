@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>JACK: Marswalk — NASA Space Apps 2026</title>
     <meta name="description" content="A playable Mars EVA planning and field-science simulation built on NASA open data." />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <!-- GitHub Pages cannot set response headers. Vercel and Netlify enforce
+         the equivalent (and stronger) policy at the HTTP layer. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://trek.nasa.gov https://flagcdn.com; connect-src 'self' ws: wss:; media-src 'self'; manifest-src 'self'" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta name="theme-color" content="#05070b" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
