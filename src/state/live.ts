@@ -34,7 +34,7 @@ export const live = {
     x: 0, z: 34, y: 0, heading: Math.PI, speedMs: 0, stride: 0, moving: 0, working: 0,
     tool: 'none',
   } as LiveJack,
-  /** Camera yaw offset the player controls with the mouse or Q/E. */
+  /** Camera look direction, radians, 0 = +z. Controlled with the mouse or Q/E. */
   camYaw: 0,
   camPitch: 0.26,
   camDist: 9,
