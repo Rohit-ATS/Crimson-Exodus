@@ -115,7 +115,10 @@ const saved = load()
 
 export const useSettings = create<Settings & SettingsActions>((set, get) => ({
   quality: saved.quality ?? 'auto',
-  autoTier: 2,
+  // Start at balanced while the adaptive controller measures. Starting at the
+  // highest tier makes the first seconds stutter on integrated GPUs, before
+  // the controller has enough samples to react.
+  autoTier: 1,
   frameMs: 0,
   reducedMotion: saved.reducedMotion ?? prefersReducedMotion(),
   hudScale: saved.hudScale ?? 1,
@@ -158,4 +161,4 @@ export const useSettings = create<Settings & SettingsActions>((set, get) => ({
  * to change a number. The store remains the source of truth; this is kept in
  * step by the adaptive controller.
  */
-export const renderTier: { current: QualityTier } = { current: TIERS[2] }
+export const renderTier: { current: QualityTier } = { current: TIERS[1] }

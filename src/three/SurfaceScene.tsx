@@ -264,6 +264,10 @@ function CameraRig() {
   const { camera } = useThree()
   const look = useRef(new THREE.Vector3())
   const pos = useRef(new THREE.Vector3(0, 6, 24))
+  const eye = useRef(new THREE.Vector3())
+  const forward = useRef(new THREE.Vector3())
+  const wanted = useRef(new THREE.Vector3())
+  const lookTarget = useRef(new THREE.Vector3())
 
   useFrame((_, dt) => {
     const j = live.jack
@@ -271,15 +275,13 @@ function CameraRig() {
 
     if (live.firstPerson) {
       // Eye height inside the helmet.
-      const eye = new THREE.Vector3(j.x, j.y + 1.58, j.z)
+      eye.current.set(j.x, j.y + 1.58, j.z)
       // Look where the player is steering (the same frame movement uses).
-      const fwd = new THREE.Vector3(Math.sin(live.camYaw), 0, Math.cos(live.camYaw))
-      pos.current.lerp(eye, Math.min(1, dt * 14))
+      forward.current.set(Math.sin(live.camYaw), 0, Math.cos(live.camYaw))
+      pos.current.lerp(eye.current, Math.min(1, dt * 14))
       camera.position.copy(pos.current)
-      look.current.lerp(
-        new THREE.Vector3(j.x + fwd.x * 12, j.y + 1.5 - live.camPitch * 6, j.z + fwd.z * 12),
-        Math.min(1, dt * 11),
-      )
+      lookTarget.current.set(j.x + forward.current.x * 12, j.y + 1.5 - live.camPitch * 6, j.z + forward.current.z * 12)
+      look.current.lerp(lookTarget.current, Math.min(1, dt * 11))
       camera.lookAt(look.current)
       return
     }
@@ -288,18 +290,19 @@ function CameraRig() {
     // swings the view and flips the meaning of the movement keys.
     const yaw = live.camYaw + Math.PI
     const d = live.camDist
-    const want = new THREE.Vector3(
+    wanted.current.set(
       j.x + Math.sin(yaw) * d,
       j.y + 1.3 + Math.sin(live.camPitch) * d,
       j.z + Math.cos(yaw) * d,
     )
     // Keep the camera above the ground.
-    const ground = heightAt(want.x, want.z) + 1.6
-    if (want.y < ground) want.y = ground
+    const ground = heightAt(wanted.current.x, wanted.current.z) + 1.6
+    if (wanted.current.y < ground) wanted.current.y = ground
 
-    pos.current.lerp(want, k)
+    pos.current.lerp(wanted.current, k)
     camera.position.copy(pos.current)
-    look.current.lerp(new THREE.Vector3(j.x, j.y + 1.35, j.z), Math.min(1, dt * 7))
+    lookTarget.current.set(j.x, j.y + 1.35, j.z)
+    look.current.lerp(lookTarget.current, Math.min(1, dt * 7))
     camera.lookAt(look.current)
   })
 

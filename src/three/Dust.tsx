@@ -34,11 +34,14 @@ export function DustField({
   intensity, windFromDeg, windMs,
 }: { intensity: number; windFromDeg: number; windMs: number }) {
   const pts = useRef<THREE.Points>(null)
+  const updateAccumulator = useRef(0)
   const { camera } = useThree()
   const tex = useMemo(grainTexture, [])
 
   const { geo, velocities } = useMemo(() => {
-    const N = 14000
+    // A few thousand sprites read as suspended dust at the camera's scale;
+    // 14k made this CPU-updated field dominate frame time on laptop GPUs.
+    const N = 5000
     const pos = new Float32Array(N * 3)
     const size = new Float32Array(N)
     const vel = new Float32Array(N * 3)
@@ -75,6 +78,13 @@ export function DustField({
     pts.current.visible = intensity > 0.012
     if (!pts.current.visible) return
 
+    // The particles move slowly, so updating their CPU positions at 30 Hz is
+    // visually indistinguishable while halving per-frame work and buffer uploads.
+    updateAccumulator.current += dt
+    if (updateAccumulator.current < 1 / 30) return
+    const step = Math.min(updateAccumulator.current, 0.12)
+    updateAccumulator.current = 0
+
     const pos = geo.attributes.position as THREE.BufferAttribute
     const arr = pos.array as Float32Array
     // Wind blows FROM windFromDeg, so the motion vector points the other way.
@@ -86,9 +96,9 @@ export function DustField({
     const cz = camera.position.z
 
     for (let i = 0; i < arr.length / 3; i++) {
-      arr[i * 3] += vx * dt
-      arr[i * 3 + 1] += velocities[i * 3 + 1] * dt
-      arr[i * 3 + 2] += vz * dt
+      arr[i * 3] += vx * step
+      arr[i * 3 + 1] += velocities[i * 3 + 1] * step
+      arr[i * 3 + 2] += vz * step
       // Wrap the box around the camera so the field is always where you are.
       let x = arr[i * 3] - cx
       let z = arr[i * 3 + 2] - cz

@@ -28,7 +28,7 @@ import { hazardAt, shelterAdvice, type HazardSample, type ShelterAdvice } from '
 import {
   CACHES, ROUTES, SITE, STATIONS, type Route, type Station,
 } from '../mission/site'
-import { EXTENT, gradeAlong, heightAt, roughnessAt, walkSpeed } from '../mission/terrain'
+import { EXTENT, gradeAlong, heightAt, roughnessAt, slopeDeg, walkSpeed } from '../mission/terrain'
 import {
   directToHome, nearestIndex, pathStats, remainingToHome, samplePath,
   type PathStats, type SampledPoint,
@@ -722,11 +722,16 @@ export const useStore = create<Store>((set, get) => ({
 
     // --- consumables -------------------------------------------------------
     const lowVis = weather.visibilityM < 320
+    // Terrain roughness internally also needs slope. Share that sample with
+    // the hazard calculation below instead of evaluating both at this same
+    // position twice on every simulation step.
+    const localSlope = slopeDeg(j.x, j.z)
+    const localRoughness = roughnessAt(j.x, j.z, localSlope)
     const rates = loadRates(JACK_SUIT, {
       activity,
       speedMs: j.speedMs,
       grade: gradeAlong(j.x, j.z, Math.sin(j.heading), Math.cos(j.heading)),
-      roughness: roughnessAt(j.x, j.z),
+      roughness: localRoughness,
       airTempC: env.airTempC,
       irradiance: env.directIrradiance,
       dustFouling: s.cons.dustFouling,
@@ -759,7 +764,10 @@ export const useStore = create<Store>((set, get) => ({
     const ret = returnEstimate(JACK_SUIT, cons, returnDistanceM, returnSpeed, returnRates)
 
     // --- hazard and advice -------------------------------------------------
-    const hazard = hazardAt(j.x, j.z, weather, s.stormFromDeg)
+    const hazard = hazardAt(j.x, j.z, weather, s.stormFromDeg, {
+      slope: localSlope,
+      roughness: localRoughness,
+    })
     let advice: ShelterAdvice | null = null
     if (weather.advisesShelter || ret.status === 'warning' || ret.status === 'critical') {
       advice = shelterAdvice(
@@ -901,6 +909,13 @@ export const useStore = create<Store>((set, get) => ({
       activity, speedMs: j.speedMs, pathIndex, nearStation, atLander, nearCache,
       stations, messages, sentAdvisories,
       autoTraverse: (arrivedAt && !s.aborting) || routeComplete ? false : s.autoTraverse,
+      // Arriving somewhere is a decision point, and running the mission clock
+      // at 30x while somebody reads a station briefing is hostile. Walking is
+      // the part worth compressing; deciding is not.
+      // `atLander` is also true at step-out, so only a RETURN counts here.
+      timeScale: (arrivedAt || (atLander && evaSec > 300)) && s.timeScale > 10
+        ? 10
+        : s.timeScale,
       distanceWalkedM: s.distanceWalkedM + stepped,
       maxRangeReachedM: Math.max(s.maxRangeReachedM, Math.hypot(j.x, j.z)),
       worstMarginMin: Math.min(s.worstMarginMin, ret.marginMinutes),

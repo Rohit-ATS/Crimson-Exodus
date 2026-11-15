@@ -73,9 +73,10 @@ export function hazardAt(
   z: number,
   weather: WeatherEvent,
   fromDeg: number,
+  terrain?: { slope: number; roughness: number },
 ): HazardSample {
-  const sl = slopeDeg(x, z)
-  const rough = roughnessAt(x, z)
+  const sl = terrain?.slope ?? slopeDeg(x, z)
+  const rough = terrain?.roughness ?? roughnessAt(x, z, sl)
   const { protection, shelter, distM } = protectionAt(x, z, fromDeg)
 
   // Slope term: negligible below 8 deg, serious by 25 deg.

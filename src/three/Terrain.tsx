@@ -86,10 +86,10 @@ export default function Terrain({ dustFouling = 0 }: { dustFouling?: number }) {
              vec2 p = vWPos.xz;
 
              // Three scales of regolith patchiness.
-             float nBroad  = jfbm(p * 0.0045, 4);
-             float nMid    = jfbm(p * 0.045, 4);
-             float nFine   = jfbm(p * 0.42, 3);
-             float nGrit   = jfbm(p * 3.4, 3);
+             float nBroad  = jfbm(p * 0.0045, 3);
+             float nMid    = jfbm(p * 0.045, 3);
+             float nFine   = jfbm(p * 0.42, 2);
+             float nGrit   = jfbm(p * 3.4, 2);
 
              // Aeolian ripple banding: real megaripples at Jezero run with a
              // consistent crest orientation set by the prevailing wind.
@@ -133,7 +133,7 @@ export default function Terrain({ dustFouling = 0 }: { dustFouling?: number }) {
           '#include <roughnessmap_fragment>',
           `#include <roughnessmap_fragment>
            {
-             float rn = jfbm(vWPos.xz * 0.09, 3);
+             float rn = jfbm(vWPos.xz * 0.09, 2);
              // Dusty flats are very diffuse; swept bedrock is a little glossier.
              roughnessFactor = clamp(0.98 - 0.18 * smoothstep(0.15, 0.45, vSlope) - 0.06 * rn, 0.55, 1.0);
            }`,
@@ -157,9 +157,9 @@ export default function Terrain({ dustFouling = 0 }: { dustFouling?: number }) {
              float gx = jfbm((p + vec2(eN, 0.0)) * 26.0, 2);
              float gz = jfbm((p + vec2(0.0, eN)) * 26.0, 2);
 
-             float h0 = jfbm(p * 1.9, 4) * 0.045 + jfbm(p * 0.52, 4) * 0.16 + jfbm(p * 0.13, 4) * 0.42;
-             float hx = jfbm((p + vec2(e, 0.0)) * 1.9, 4) * 0.045 + jfbm((p + vec2(e, 0.0)) * 0.52, 4) * 0.16 + jfbm((p + vec2(e, 0.0)) * 0.13, 4) * 0.42;
-             float hz = jfbm((p + vec2(0.0, e)) * 1.9, 4) * 0.045 + jfbm((p + vec2(0.0, e)) * 0.52, 4) * 0.16 + jfbm((p + vec2(0.0, e)) * 0.13, 4) * 0.42;
+             float h0 = jfbm(p * 1.9, 3) * 0.045 + jfbm(p * 0.52, 3) * 0.16 + jfbm(p * 0.13, 3) * 0.42;
+             float hx = jfbm((p + vec2(e, 0.0)) * 1.9, 3) * 0.045 + jfbm((p + vec2(e, 0.0)) * 0.52, 3) * 0.16 + jfbm((p + vec2(e, 0.0)) * 0.13, 3) * 0.42;
+             float hz = jfbm((p + vec2(0.0, e)) * 1.9, 3) * 0.045 + jfbm((p + vec2(0.0, e)) * 0.52, 3) * 0.16 + jfbm((p + vec2(0.0, e)) * 0.13, 3) * 0.42;
              vec3 dn = normalize(vec3(
                -(hx - h0) / e - near * (gx - g0) / eN * 0.016,
                1.0,

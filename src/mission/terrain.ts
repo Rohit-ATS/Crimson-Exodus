@@ -351,7 +351,7 @@ export function slopeDeg(x: number, z: number, eps = 2.5): number {
  * Derived from short-baseline height variance, which is what actually slows a
  * walker down: loose blocks, ripple crests and scree.
  */
-export function roughnessAt(x: number, z: number): number {
+export function roughnessAt(x: number, z: number, knownSlopeDeg?: number): number {
   const h0 = heightAt(x, z)
   let varSum = 0
   const samples: Array<[number, number]> = [
@@ -363,7 +363,11 @@ export function roughnessAt(x: number, z: number): number {
   }
   const rms = Math.sqrt(varSum / samples.length)
   // Talus on a steep face is rougher than the floor regardless of local variance.
-  const slopeBoost = sstep(10, 26, slopeDeg(x, z)) * 0.3
+  // Callers which already measured the local slope (for example, the live
+  // hazard and consumables update) can pass it through and avoid four more
+  // height-field evaluations.
+  const slope = knownSlopeDeg ?? slopeDeg(x, z)
+  const slopeBoost = sstep(10, 26, slope) * 0.3
   return Math.min(1.75, 1 + rms * 0.55 + slopeBoost)
 }
 

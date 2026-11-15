@@ -120,6 +120,8 @@ export default function Jack({
   }, [dust])
 
   const clockRef = useRef(0)
+  const nextNormalAt = useRef(0)
+  const surfaceNormal = useRef(new THREE.Vector3(0, 1, 0))
 
   useFrame((_, dt) => {
     clockRef.current += dt
@@ -136,7 +138,12 @@ export default function Jack({
     g.rotation.y += d * Math.min(1, dt * 9)
 
     // Stand on the slope: tilt the whole body to the local surface normal.
-    const [nx, , nz] = normalAt(j.x, j.z, 2.0)
+    if (clockRef.current >= nextNormalAt.current) {
+      const [nx, ny, nz] = normalAt(j.x, j.z, 2.0)
+      surfaceNormal.current.set(nx, ny, nz)
+      nextNormalAt.current = clockRef.current + 0.1
+    }
+    const { x: nx, z: nz } = surfaceNormal.current
     if (body.current) {
       body.current.rotation.x += (Math.atan(nz) * Math.cos(g.rotation.y) + Math.atan(nx) * Math.sin(g.rotation.y) - body.current.rotation.x) * Math.min(1, dt * 5)
       body.current.rotation.z += (-Math.atan(nx) * Math.cos(g.rotation.y) + Math.atan(nz) * Math.sin(g.rotation.y) - body.current.rotation.z) * Math.min(1, dt * 5)
