@@ -95,7 +95,8 @@ export default function Surface() {
     let dragging = false
     let lx = 0, ly = 0
     const down = (e: MouseEvent) => {
-      if ((e.target as HTMLElement)?.closest('button, input, a, .panel')) return
+      const t = e.target
+      if (t instanceof Element && t.closest('button, input, a, .panel')) return
       dragging = true; lx = e.clientX; ly = e.clientY
     }
     const move = (e: MouseEvent) => {
@@ -106,7 +107,8 @@ export default function Surface() {
     }
     const up = () => { dragging = false }
     const wheel = (e: WheelEvent) => {
-      if ((e.target as HTMLElement)?.closest('.panel')) return
+      const t = e.target
+      if (t instanceof Element && t.closest('.panel')) return
       live.camDist = Math.max(3.2, Math.min(42, live.camDist + e.deltaY * 0.012))
     }
     window.addEventListener('mousedown', down)

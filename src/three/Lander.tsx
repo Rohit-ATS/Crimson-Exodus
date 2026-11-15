@@ -18,15 +18,45 @@ export default function Lander({ dust = 0, lightsOn = true }: { dust?: number; l
   const mats = useMemo(() => {
     const tint = (hex: string, a: number) => new THREE.Color(hex).lerp(new THREE.Color('#8a6340'), a)
     return {
-      blanket: new THREE.MeshStandardMaterial({ color: tint('#eceae4', dust * 0.45), roughness: 0.55, metalness: 0.1 }),
-      kapton: new THREE.MeshStandardMaterial({ color: tint('#d9a63c', dust * 0.3), roughness: 0.28, metalness: 0.85 }),
-      metal: new THREE.MeshStandardMaterial({ color: '#9aa0a6', roughness: 0.34, metalness: 0.85 }),
-      dark: new THREE.MeshStandardMaterial({ color: '#23262b', roughness: 0.45, metalness: 0.5 }),
-      nozzle: new THREE.MeshStandardMaterial({ color: '#4a4136', roughness: 0.4, metalness: 0.8 }),
-      panel: new THREE.MeshStandardMaterial({
-        color: tint('#1b2f5c', dust * 0.6), roughness: 0.22, metalness: 0.5,
-        emissive: '#0a1733', emissiveIntensity: 0.3,
+      /**
+       * Materials taken from what spacecraft are actually finished with.
+       *
+       *  - White thermal blanket over the habitable volume: beta cloth, very
+       *    diffuse, barely metallic. White because passive thermal control on
+       *    a sunlit surface means reflecting as much as you possibly can.
+       *  - Amber multi-layer insulation on the descent stage. The famous gold
+       *    foil is aluminised Kapton, and it is gold because that is the
+       *    colour of a very thin aluminium coating on polyimide. It is a
+       *    near-mirror in the infrared, which is the entire point.
+       *  - Scorched columbium and ablative on the engine bells, not shiny
+       *    metal: a nozzle that has fired looks burnt, because it is.
+       */
+      blanket: new THREE.MeshStandardMaterial({
+        color: tint('#eceae4', dust * 0.45), roughness: 0.78, metalness: 0.0, envMapIntensity: 0.75,
       }),
+      kapton: new THREE.MeshStandardMaterial({
+        color: tint('#c99a36', dust * 0.3), roughness: 0.36, metalness: 0.92, envMapIntensity: 1.9,
+      }),
+      metal: new THREE.MeshStandardMaterial({
+        color: '#9aa0a6', roughness: 0.32, metalness: 0.9, envMapIntensity: 1.35,
+      }),
+      dark: new THREE.MeshStandardMaterial({
+        color: '#23262b', roughness: 0.5, metalness: 0.55, envMapIntensity: 0.9,
+      }),
+      // Plume-scoured skirt: engines throw regolith straight back up at the
+      // underside of the vehicle, so everything down there is sandblasted.
+      scoured: new THREE.MeshStandardMaterial({
+        color: tint('#8d8a82', 0.45 + dust * 0.3), roughness: 0.9, metalness: 0.2, envMapIntensity: 0.5,
+      }),
+      nozzle: new THREE.MeshStandardMaterial({
+        color: '#3b332a', roughness: 0.62, metalness: 0.65, envMapIntensity: 0.8,
+      }),
+      panel: new THREE.MeshStandardMaterial({
+        color: tint('#16284f', dust * 0.5), roughness: 0.18, metalness: 0.55,
+        emissive: '#081024', emissiveIntensity: 0.25, envMapIntensity: 1.6,
+      }),
+      nasaBlue: new THREE.MeshStandardMaterial({ color: '#0b3d91', roughness: 0.55, envMapIntensity: 0.6 }),
+      nasaRed: new THREE.MeshStandardMaterial({ color: '#fc3d21', roughness: 0.55, envMapIntensity: 0.6 }),
       glass: new THREE.MeshStandardMaterial({
         color: '#9fd8ff', roughness: 0.08, metalness: 0.4,
         emissive: '#8fd0ff', emissiveIntensity: lightsOn ? 1.5 : 0.1,
@@ -73,11 +103,15 @@ export default function Lander({ dust = 0, lightsOn = true }: { dust?: number; l
       })}
 
       {/* ---- Descent stage ---------------------------------------------- */}
-      <mesh position={[0, 1.65, 0]} material={mats.blanket} castShadow receiveShadow>
-        <cylinderGeometry args={[2.0, 2.25, 0.95, 8]} />
+      <mesh position={[0, 1.65, 0]} material={mats.kapton} castShadow receiveShadow>
+        <cylinderGeometry args={[2.0, 2.25, 0.95, 24]} />
+      </mesh>
+      {/* Plume-scoured underside */}
+      <mesh position={[0, 1.06, 0]} material={mats.scoured} castShadow>
+        <cylinderGeometry args={[2.1, 1.95, 0.1, 24]} />
       </mesh>
       <mesh position={[0, 1.17, 0]} material={mats.kapton}>
-        <cylinderGeometry args={[2.26, 2.1, 0.12, 8]} />
+        <cylinderGeometry args={[2.26, 2.1, 0.12, 24]} />
       </mesh>
       {/* Propellant tanks tucked under the deck */}
       {[0, 1, 2, 3].map((i) => {
@@ -109,15 +143,15 @@ export default function Lander({ dust = 0, lightsOn = true }: { dust?: number; l
 
       {/* ---- Pressurised module ---------------------------------------- */}
       <mesh position={[0, 3.35, 0]} material={mats.blanket} castShadow receiveShadow>
-        <cylinderGeometry args={[1.72, 1.72, 2.5, 20]} />
+        <cylinderGeometry args={[1.72, 1.72, 2.5, 32]} />
       </mesh>
       <mesh position={[0, 4.72, 0]} material={mats.blanket} castShadow>
-        <sphereGeometry args={[1.72, 22, 12, 0, Math.PI * 2, 0, Math.PI * 0.42]} />
+        <sphereGeometry args={[1.72, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.42]} />
       </mesh>
       {/* Thermal blanket banding */}
       {[2.5, 3.1, 3.7, 4.3].map((y) => (
         <mesh key={y} position={[0, y, 0]} material={mats.kapton}>
-          <cylinderGeometry args={[1.74, 1.74, 0.07, 20]} />
+          <cylinderGeometry args={[1.745, 1.745, 0.07, 32]} />
         </mesh>
       ))}
 
@@ -172,6 +206,38 @@ export default function Lander({ dust = 0, lightsOn = true }: { dust?: number; l
           </mesh>
         )
       })}
+
+      {/* ---- Reaction control quads ------------------------------------ */}
+      {[0, 1, 2, 3].map((i) => {
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 4
+        return (
+          <group key={i} position={[Math.cos(a) * 1.76, 4.35, Math.sin(a) * 1.76]} rotation={[0, -a, 0]}>
+            <mesh material={mats.metal} castShadow>
+              <boxGeometry args={[0.26, 0.2, 0.2]} />
+            </mesh>
+            {[-0.06, 0.06].map((dy) => (
+              <mesh key={dy} position={[0.16, dy, 0]} rotation={[0, 0, Math.PI / 2]} material={mats.nozzle}>
+                <cylinderGeometry args={[0.035, 0.055, 0.1, 10]} />
+              </mesh>
+            ))}
+          </group>
+        )
+      })}
+
+      {/* ---- NASA insignia on the habitat ------------------------------
+          The agency's own blue and red. Markings are how you tell flight
+          hardware from a mock-up at a glance in any photograph. */}
+      <group position={[0, 3.95, 0]}>
+        <mesh position={[0, 0, 1.722]} material={mats.nasaBlue}>
+          <circleGeometry args={[0.36, 28]} />
+        </mesh>
+        <mesh position={[0, 0.02, 1.728]} rotation={[0, 0, 0.42]} material={mats.nasaRed}>
+          <boxGeometry args={[0.62, 0.055, 0.004]} />
+        </mesh>
+        <mesh position={[0, 0, 1.726]} material={mats.blanket}>
+          <ringGeometry args={[0.355, 0.4, 28]} />
+        </mesh>
+      </group>
 
       {/* ---- High-gain dish: the direct-to-Earth link ------------------- */}
       <group position={[1.45, 5.0, -0.6]} ref={dish}>

@@ -7,9 +7,11 @@ import { heightAt } from '../mission/terrain'
 import Terrain from './Terrain'
 import FarTerrain from './FarTerrain'
 import Rocks from './Rocks'
+import NearClasts from './NearClasts'
 import Jack from './Jack'
 import Lander from './Lander'
 import Sky from './Sky'
+import MarsEnvironment from './MarsEnvironment'
 import RouteLine from './RouteLine'
 import Markers from './Markers'
 import FlagMesh from './FlagMesh'
@@ -83,7 +85,9 @@ export default function SurfaceScene() {
   // In heavy dust the sky becomes the light source: direct sun collapses, the
   // diffuse term rises, and shadows all but disappear. The total still falls.
   const dustLoad = Math.min(1, env.dustOpticalDepth / 3.4)
-  const ambientIntensity = dayness * (0.26 + 0.62 * dustLoad) * (1 - 0.42 * dustLoad) + 0.06
+  // The environment map now carries most of the sky bounce, so the analytic
+  // hemisphere fill is pulled back to avoid double-counting it.
+  const ambientIntensity = (dayness * (0.26 + 0.62 * dustLoad) * (1 - 0.42 * dustLoad) + 0.06) * 0.6
 
   // Overall exposure tracks how much sunlight is actually reaching the ground.
   // Without this a storm renders as a brightly lit orange day.
@@ -92,12 +96,13 @@ export default function SurfaceScene() {
   return (
     <Canvas
       shadows
-      dpr={[1, 1.75]}
+      dpr={[1, 2]}
       gl={{ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true }}
       camera={{ fov: 58, near: 0.1, far: 12000, position: [0, 6, 20] }}
       onCreated={({ gl, scene }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping
         gl.toneMappingExposure = 1.05
+        gl.shadowMap.type = THREE.PCFSoftShadowMap
         scene.background = null
       }}
       style={{ position: 'absolute', inset: 0 }}
@@ -107,17 +112,27 @@ export default function SurfaceScene() {
 
       <Sky sunDir={sunDir} tau={env.dustOpticalDepth} dayness={dayness} transmission={env.solarTransmission} />
 
+      {/* Image-based lighting from the same sky. Without it, metal has nothing
+          to reflect and renders as grey plastic. */}
+      <MarsEnvironment
+        sunDir={sunDir}
+        tau={env.dustOpticalDepth}
+        dayness={dayness}
+        transmission={env.solarTransmission}
+      />
+
       <SunLight dir={sunDir} color={sunColor} intensity={sunIntensity} />
 
       {/* Sky dome bounce: on Mars this is a strong, warm, very diffuse source. */}
       <hemisphereLight
         args={[fogColor.getHex(), 0x3a2318, ambientIntensity]}
       />
-      <ambientLight intensity={0.1 + 0.2 * dayness} color={fogColor} />
+      <ambientLight intensity={(0.1 + 0.2 * dayness) * 0.5} color={fogColor} />
 
       <Terrain dustFouling={dustFouling} />
       <FarTerrain />
       <Rocks dust={dustFouling} />
+      <NearClasts dust={dustFouling} />
       <Lander dust={dustFouling} lightsOn />
 
       <RouteLine path={path} progressIndex={pathIndex} />
@@ -205,8 +220,8 @@ function SunLight({ dir, color, intensity }: { dir: THREE.Vector3; color: THREE.
       <directionalLight
         ref={light}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={4096}
+        shadow-mapSize-height={4096}
         shadow-camera-left={-55}
         shadow-camera-right={55}
         shadow-camera-top={55}

@@ -20,12 +20,35 @@ import { normalAt } from '../mission/terrain'
  * GAME MECHANIC / ARTISTIC: this is not a model of any real or planned suit.
  */
 
-const SUIT = '#e7e4dc'
-const SUIT_SHADE = '#cfccc3'
-const SOFT = '#dedad0'
+/**
+ * Palette, taken from what a real EVA suit is actually made of.
+ *
+ *  - The outer layer of a NASA EVA suit is a white Thermal Micrometeoroid
+ *    Garment: Ortho-Fabric over aluminised Mylar. White because on a surface
+ *    with no atmosphere worth the name, reflecting sunlight IS the cooling
+ *    system, and because white shows contamination immediately.
+ *  - Joint bearings at shoulder, elbow, wrist, hip, knee and ankle are
+ *    anodised aluminium and read as bare metal, not fabric. They are the
+ *    single most suit-like detail on the whole model.
+ *  - The sun visor is gold. Not for looks: a vacuum-deposited gold film a few
+ *    hundred atoms thick reflects most incoming infrared while passing enough
+ *    visible light to see through, which is exactly the filter you want.
+ *  - Red commander stripes on the arms, legs and helmet. A real identification
+ *    aid: on Apollo 13 onward the commander wore them, because in a
+ *    photograph two white suits are indistinguishable.
+ *  - NASA blue 0B3D91 and NASA red FC3D21 are the agency's own brand colours,
+ *    used here for the insignia only.
+ */
+const SUIT = '#f0efea'          // hard upper torso, fibreglass over TMG
+const SUIT_SHADE = '#dcdad3'    // shadowed TMG panels, chest module, gloves
+const SOFT = '#e8e5dd'          // soft-goods limbs, Ortho-Fabric
+const BEARING = '#9ba1a9'       // anodised aluminium joint bearings
+const BOOT = '#2a2c30'          // boot sole and tread
 const DARK = '#232428'
-const GOLD = '#ffc55c'
-const ACCENT = '#e2603a'
+const GOLD = '#d7a93f'
+const ACCENT = '#c8102e'        // commander stripe red
+const NASA_BLUE = '#0b3d91'
+const NASA_RED = '#fc3d21'
 
 export default function Jack({
   dust = 0, lampsOn = false, hidden = false,
@@ -48,19 +71,48 @@ export default function Jack({
     const tint = (hex: string, amount: number) =>
       new THREE.Color(hex).lerp(new THREE.Color('#9a7048'), amount)
     return {
-      suit: new THREE.MeshStandardMaterial({ color: tint(SUIT, dust * 0.5), roughness: 0.68, metalness: 0.03 }),
-      suitShade: new THREE.MeshStandardMaterial({ color: tint(SUIT_SHADE, dust * 0.55), roughness: 0.74 }),
-      soft: new THREE.MeshStandardMaterial({ color: tint(SOFT, dust * 0.6), roughness: 0.92 }),
-      dark: new THREE.MeshStandardMaterial({ color: DARK, roughness: 0.5, metalness: 0.35 }),
+      // Fibreglass hard shell: smooth, barely any specular, no metal.
+      suit: new THREE.MeshStandardMaterial({
+        color: tint(SUIT, dust * 0.5), roughness: 0.52, metalness: 0.0, envMapIntensity: 0.8,
+      }),
+      suitShade: new THREE.MeshStandardMaterial({
+        color: tint(SUIT_SHADE, dust * 0.55), roughness: 0.66, envMapIntensity: 0.7,
+      }),
+      // Woven Ortho-Fabric: very rough, almost entirely diffuse.
+      soft: new THREE.MeshStandardMaterial({
+        color: tint(SOFT, dust * 0.6), roughness: 0.95, metalness: 0.0, envMapIntensity: 0.65,
+      }),
+      // Dust is thrown up from the ground, so it loads the lower legs and
+      // boots several times harder than the torso. Apollo crews came back
+      // with suits grey to the knee and clean at the shoulder.
+      softDirty: new THREE.MeshStandardMaterial({
+        color: tint(SOFT, Math.min(0.85, 0.22 + dust * 1.5)), roughness: 0.97, envMapIntensity: 0.6,
+      }),
+      bearing: new THREE.MeshStandardMaterial({
+        color: BEARING, roughness: 0.3, metalness: 0.88, envMapIntensity: 1.2,
+      }),
+      boot: new THREE.MeshStandardMaterial({
+        color: BOOT, roughness: 0.85, metalness: 0.05, envMapIntensity: 0.4,
+      }),
+      dark: new THREE.MeshStandardMaterial({
+        color: DARK, roughness: 0.45, metalness: 0.4, envMapIntensity: 0.9,
+      }),
+      // Vacuum-deposited gold on the sun visor: a true mirror, so it needs the
+      // environment map to look like anything at all.
       gold: new THREE.MeshStandardMaterial({
-        color: GOLD, roughness: 0.14, metalness: 1,
-        envMapIntensity: 1.4,
+        color: GOLD, roughness: 0.075, metalness: 1,
+        envMapIntensity: 2.6,
       }),
-      accent: new THREE.MeshStandardMaterial({ color: ACCENT, roughness: 0.55 }),
+      accent: new THREE.MeshStandardMaterial({ color: ACCENT, roughness: 0.6, envMapIntensity: 0.6 }),
+      blue: new THREE.MeshStandardMaterial({ color: NASA_BLUE, roughness: 0.6, envMapIntensity: 0.6 }),
+      red: new THREE.MeshStandardMaterial({ color: NASA_RED, roughness: 0.6, envMapIntensity: 0.6 }),
       glass: new THREE.MeshStandardMaterial({
-        color: '#1b2026', roughness: 0.1, metalness: 0.9, transparent: true, opacity: 0.55,
+        color: '#141a20', roughness: 0.04, metalness: 0.6,
+        transparent: true, opacity: 0.42, envMapIntensity: 2.2,
       }),
-      tank: new THREE.MeshStandardMaterial({ color: '#b9bec4', roughness: 0.35, metalness: 0.7 }),
+      tank: new THREE.MeshStandardMaterial({
+        color: '#b9bec4', roughness: 0.3, metalness: 0.78, envMapIntensity: 1.3,
+      }),
       lens: new THREE.MeshStandardMaterial({ color: '#0b1016', roughness: 0.05, metalness: 0.9 }),
       led: new THREE.MeshStandardMaterial({ color: '#4fe8ff', emissive: '#4fe8ff', emissiveIntensity: 2.6 }),
       ledWarn: new THREE.MeshStandardMaterial({ color: '#ffb24a', emissive: '#ffb24a', emissiveIntensity: 2.2 }),
@@ -162,22 +214,44 @@ export default function Jack({
         {/* ---- Legs ------------------------------------------------------ */}
         {([['L', -0.14, legL, kneeL], ['R', 0.14, legR, kneeR]] as const).map(([k, dx, hip, knee]) => (
           <group key={k} position={[dx, 0.92, 0]} ref={hip}>
+            {/* Hip bearing: a real suit rotates here on a metal race */}
+            <mesh position={[0, -0.03, 0]} material={mats.bearing} castShadow>
+              <cylinderGeometry args={[0.108, 0.108, 0.05, 18]} />
+            </mesh>
             {/* thigh */}
             <mesh position={[0, -0.21, 0]} material={mats.soft} castShadow>
               <capsuleGeometry args={[0.105, 0.3, 4, 10]} />
             </mesh>
+            {/* Commander stripe, thigh */}
+            <mesh position={[0, -0.3, 0]} material={mats.accent}>
+              <cylinderGeometry args={[0.107, 0.107, 0.034, 16]} />
+            </mesh>
             <group position={[0, -0.44, 0]} ref={knee}>
-              {/* shin */}
-              <mesh position={[0, -0.2, 0]} material={mats.soft} castShadow>
+              {/* Knee bearing */}
+              <mesh material={mats.bearing} castShadow>
+                <cylinderGeometry args={[0.094, 0.094, 0.045, 16]} />
+              </mesh>
+              {/* shin, dusted from the ground up */}
+              <mesh position={[0, -0.2, 0]} material={mats.softDirty} castShadow>
                 <capsuleGeometry args={[0.092, 0.28, 4, 10]} />
               </mesh>
-              {/* boot */}
-              <mesh position={[0, -0.42, 0.045]} material={mats.suitShade} castShadow>
+              {/* Ankle bearing */}
+              <mesh position={[0, -0.355, 0]} material={mats.bearing}>
+                <cylinderGeometry args={[0.082, 0.082, 0.04, 14]} />
+              </mesh>
+              {/* boot: fabric upper, hard sole, tread */}
+              <mesh position={[0, -0.42, 0.045]} material={mats.softDirty} castShadow>
                 <boxGeometry args={[0.15, 0.1, 0.3]} />
               </mesh>
-              <mesh position={[0, -0.47, 0.045]} material={mats.dark}>
-                <boxGeometry args={[0.158, 0.035, 0.31]} />
+              <mesh position={[0, -0.455, 0.045]} material={mats.boot}>
+                <boxGeometry args={[0.158, 0.04, 0.31]} />
               </mesh>
+              {/* Tread blocks. Boot prints are data: Apollo photographed every one. */}
+              {[0, 1, 2, 3, 4].map((t) => (
+                <mesh key={t} position={[0, -0.478, -0.095 + t * 0.048]} material={mats.boot}>
+                  <boxGeometry args={[0.148, 0.014, 0.024]} />
+                </mesh>
+              ))}
             </group>
           </group>
         ))}
@@ -191,9 +265,17 @@ export default function Jack({
           <mesh position={[0, 0.03, 0]} material={mats.soft} castShadow>
             <capsuleGeometry args={[0.165, 0.12, 4, 12]} />
           </mesh>
-          {/* Waist ring */}
-          <mesh position={[0, -0.08, 0]} material={mats.dark}>
+          {/* Waist ring: the hard torso meets the soft lower half here */}
+          <mesh position={[0, -0.08, 0]} material={mats.bearing}>
             <cylinderGeometry args={[0.17, 0.17, 0.045, 18]} />
+          </mesh>
+
+          {/* Insignia, left chest. NASA blue and NASA red, the agency's own. */}
+          <mesh position={[-0.112, 0.3, 0.158]} rotation={[0, -0.34, 0]} material={mats.blue}>
+            <circleGeometry args={[0.035, 20]} />
+          </mesh>
+          <mesh position={[-0.113, 0.3, 0.1595]} rotation={[0, -0.34, 0.5]} material={mats.red}>
+            <boxGeometry args={[0.054, 0.006, 0.001]} />
           </mesh>
 
           {/* Chest-mounted display and control module */}
@@ -217,10 +299,22 @@ export default function Jack({
           {/* ---- Arms --------------------------------------------------- */}
           {([['L', -0.215, armL, elbowL], ['R', 0.215, armR, elbowR]] as const).map(([k, dx, sh, el]) => (
             <group key={k} position={[dx, 0.26, 0]} ref={sh}>
+              {/* Scye bearing: the shoulder joint a pressurised suit turns on */}
+              <mesh material={mats.bearing} castShadow>
+                <cylinderGeometry args={[0.084, 0.084, 0.05, 16]} />
+              </mesh>
               <mesh position={[0, -0.14, 0]} material={mats.soft} castShadow>
                 <capsuleGeometry args={[0.078, 0.2, 4, 10]} />
               </mesh>
+              {/* Commander stripe, upper arm */}
+              <mesh position={[0, -0.2, 0]} material={mats.accent}>
+                <cylinderGeometry args={[0.08, 0.08, 0.03, 14]} />
+              </mesh>
               <group position={[0, -0.3, 0]} ref={el}>
+                {/* Elbow bearing */}
+                <mesh material={mats.bearing} castShadow>
+                  <cylinderGeometry args={[0.072, 0.072, 0.04, 14]} />
+                </mesh>
                 <mesh position={[0, -0.13, 0]} material={mats.soft} castShadow>
                   <capsuleGeometry args={[0.07, 0.18, 4, 10]} />
                 </mesh>
@@ -270,7 +364,8 @@ export default function Jack({
                     </group>
                   </group>
                 )}
-                <mesh position={[0, -0.21, 0]} material={mats.dark}>
+                {/* Wrist disconnect: gloves come off at a metal ring */}
+                <mesh position={[0, -0.21, 0]} material={mats.bearing}>
                   <cylinderGeometry args={[0.072, 0.072, 0.03, 14]} />
                 </mesh>
               </group>
@@ -280,7 +375,7 @@ export default function Jack({
           {/* ---- Helmet ------------------------------------------------- */}
           <group position={[0, 0.49, 0]}>
             {/* Neck ring */}
-            <mesh position={[0, -0.08, 0]} material={mats.dark}>
+            <mesh position={[0, -0.08, 0]} material={mats.bearing}>
               <cylinderGeometry args={[0.105, 0.115, 0.05, 18]} />
             </mesh>
             {/* Pressure bubble */}

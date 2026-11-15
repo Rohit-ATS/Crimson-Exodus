@@ -146,10 +146,24 @@ export default function Terrain({ dustFouling = 0 }: { dustFouling?: number }) {
              // field. This is what makes 5 m geometry read as metre-scale ground.
              vec2 p = vWPos.xz;
              float e = 0.35;
+             // A near-field term at centimetre scale, faded out with distance.
+             // Without the fade it aliases into shimmering noise on ground a
+             // kilometre away; with it, the ground under the boots has grain
+             // and the horizon stays clean.
+             float dist = length(vViewPosition);
+             float near = 1.0 - smoothstep(6.0, 46.0, dist);
+             float eN = 0.03;
+             float g0 = jfbm(p * 26.0, 2);
+             float gx = jfbm((p + vec2(eN, 0.0)) * 26.0, 2);
+             float gz = jfbm((p + vec2(0.0, eN)) * 26.0, 2);
+
              float h0 = jfbm(p * 1.9, 4) * 0.045 + jfbm(p * 0.52, 4) * 0.16 + jfbm(p * 0.13, 4) * 0.42;
              float hx = jfbm((p + vec2(e, 0.0)) * 1.9, 4) * 0.045 + jfbm((p + vec2(e, 0.0)) * 0.52, 4) * 0.16 + jfbm((p + vec2(e, 0.0)) * 0.13, 4) * 0.42;
              float hz = jfbm((p + vec2(0.0, e)) * 1.9, 4) * 0.045 + jfbm((p + vec2(0.0, e)) * 0.52, 4) * 0.16 + jfbm((p + vec2(0.0, e)) * 0.13, 4) * 0.42;
-             vec3 dn = normalize(vec3(-(hx - h0) / e, 1.0, -(hz - h0) / e));
+             vec3 dn = normalize(vec3(
+               -(hx - h0) / e - near * (gx - g0) / eN * 0.016,
+               1.0,
+               -(hz - h0) / e - near * (gz - g0) / eN * 0.016));
              // Rotate the detail normal into the surface frame, cheaply.
              vec3 n = normalize(normal);
              vec3 t = normalize(cross(vec3(0.0, 1.0, 0.0), n) + vec3(1e-4, 0.0, 0.0));
