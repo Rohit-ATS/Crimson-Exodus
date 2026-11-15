@@ -42,6 +42,10 @@ import {
   lensActivity, photoActivity, recordActivity, shelterActivity,
   type ActivityDef,
 } from '../mission/activity'
+import {
+  SIZES, STAGES, activeStage, dsnStation, formatBytes, transferSeconds,
+  type UplinkItem,
+} from '../sim/downlink'
 import { live, resetLive } from './live'
 import { input } from './input'
 import { findCountry } from '../data/countries'
@@ -65,6 +69,48 @@ export type ProcCommit =
   | { type: 'flag'; code: string }
   | { type: 'cache'; cacheId: string }
   | { type: 'shelter' }
+
+/**
+ * A packet on its way to Earth, and the feed post it becomes when it lands.
+ *
+ * The transfer itself is animated; the flight is not, because the flight is
+ * the real one-way light time and there is no honest way to shorten it. So the
+ * post sits in the feed marked IN FLIGHT with a live countdown, and publishes
+ * itself when the clock says it has arrived.
+ */
+export interface FeedPost {
+  id: string
+  title: string
+  body: string
+  items: UplinkItem[]
+  bytes: number
+  sentEvaSec: number
+  arriveEvaSec: number
+  owltSec: number
+  published: boolean
+  /** The Deep Space Network complex that will catch it. */
+  station: string
+}
+
+export interface UplinkRun {
+  title: string
+  subtitle: string
+  items: UplinkItem[]
+  bytes: number
+  /** Real seconds the animation runs for. */
+  realSec: number
+  /** Modelled seconds the UHF hop would really take. */
+  modelledSec: number
+  elapsed: number
+  progress: number
+  complete: boolean
+  owltSec: number
+  startEvaSec: number
+  station: { name: string; place: string }
+  narrated: number
+  /** Panel to reopen afterwards. */
+  returnUi: UiPanel
+}
 
 export interface ProcRun {
   def: ActivityDef
@@ -255,6 +301,12 @@ export interface State {
   proc: ProcRun | null
   /** Ids of survival lessons the player has reached, in the order they got them. */
   lessons: string[]
+  /** The downlink currently transferring, if any. */
+  uplink: UplinkRun | null
+  /** Everything sent to the NASA feed this EVA, in flight or published. */
+  feed: FeedPost[]
+  /** Station whose package should go out as soon as the result card is closed. */
+  pendingDownlink: string | null
   // --- comms ---
   messages: CommsMessage[]
   sentAdvisories: string[]
@@ -295,7 +347,12 @@ export interface Actions {
   inspectStation: (stationId: string) => void
   recordObservation: (stationId: string, choiceId: string) => void
   collectSample: (stationId: string) => void
-  takePhoto: (label: string, dataUrl?: string) => void
+  /**
+   * Log a frame. `stationId` defaults to whatever station is in range, but the
+   * procedures pass it explicitly: a documentation frame belongs to the target
+   * that was worked, not to wherever Jack happens to be standing.
+   */
+  takePhoto: (label: string, dataUrl?: string, stationId?: string) => void
   plantFlag: (code: string) => void
   // --- procedures: the animated form of every action above -----------------
   /** Start an animated procedure. Nothing is committed until it completes. */
@@ -314,6 +371,13 @@ export interface Actions {
   beginFlag: (code: string) => void
   beginCache: () => void
   beginShelter: () => void
+  // --- the link home -------------------------------------------------------
+  /** Bundle a packet and start the downlink animation. */
+  startUplink: (title: string, subtitle: string, items: UplinkItem[]) => void
+  tickUplink: (dtRealSec: number) => void
+  dismissUplink: () => void
+  /** Build the packet for a completed station and send it. */
+  downlinkStation: (stationId: string) => void
   sendMessage: (templateId: string) => void
   finishEva: (code?: OutcomeCode) => void
   restart: () => void
@@ -422,6 +486,9 @@ function initialState(seed = Math.floor(Math.random() * 1e9)): State {
     flagsRemaining: 1,
     proc: null,
     lessons: [],
+    uplink: null,
+    feed: [],
+    pendingDownlink: null,
     messages: [],
     sentAdvisories: [],
     log: [],
@@ -492,7 +559,7 @@ export const useStore = create<Store>((set, get) => ({
       jackX: 0, jackZ: 26, jackHeading: live.jack.heading,
       stations: freshStations(),
       photos: [], samples: [], flag: null, flagsRemaining: 1, cachesUsed: [], nearCache: null,
-      proc: null, lessons: [],
+      proc: null, lessons: [], uplink: null, feed: [], pendingDownlink: null,
       messages: [], sentAdvisories: [], log: [],
       aborting: false, sheltering: false, outcome: null,
       distanceWalkedM: 0, maxRangeReachedM: 0,
@@ -812,6 +879,23 @@ export const useStore = create<Store>((set, get) => ({
     // Done last so it sees the sim state this tick produced, and so the
     // commit it may apply is not overwritten by the set above.
     if (s.proc) get().tickProcedure(dt)
+    if (s.uplink) get().tickUplink(dt)
+
+    // --- feed posts land at Earth after the real one-way light time --------
+    if (s.feed.some((f) => !f.published && f.arriveEvaSec <= evaSec)) {
+      const feed = s.feed.map((f) =>
+        !f.published && f.arriveEvaSec <= evaSec ? { ...f, published: true } : f)
+      const landed = feed.filter((f, i) => f.published && !s.feed[i].published)
+      set({ feed })
+      for (const f of landed) {
+        get().pushLog('comms',
+          `NASA FEED UPDATED \u2014 ${f.title} received at ${f.station}, ` +
+          `${formatBytes(f.bytes)}, ${f.items.length} product(s). Sent at EVA +` +
+          `${(f.sentEvaSec / 60).toFixed(0)} min, arrived ${(f.owltSec / 60).toFixed(1)} min later. ` +
+          `It is public now. Whatever you were doing when you sent it, you have been doing it ` +
+          `for ${(f.owltSec / 60).toFixed(1)} min since anyone on Earth knew.`)
+      }
+    }
 
     if (home && s.aborting) get().finishEva()
     else if (home && evaSec > 120 && allWorkDone(get()) && !get().proc) get().finishEva()
@@ -897,6 +981,9 @@ export const useStore = create<Store>((set, get) => ({
     set({ stations: { ...s.stations, [stationId]: { ...s.stations[stationId], abraded: true } } })
     get().pushLog('science',
       `${st.codename}: abraded patch cut, ${st.abradeMinutes} min. ${st.abradeReveal}`)
+    // The last beat of the procedure is documenting the fresh patch before
+    // anything else touches it, so the frame is taken here for real.
+    get().takePhoto(`${st.codename} abrasion patch \u2014 documentation frame`, live.captureFrame?.(), stationId)
   },
 
   inspectStation: (stationId) => {
@@ -910,6 +997,9 @@ export const useStore = create<Store>((set, get) => ({
       (state.abraded
         ? st.lensReveal
         : 'Through the dust coating and the oxidised rind, very little resolves. Clearing the rind first is what makes a lens worth the minutes.'))
+    get().takePhoto(
+      `${st.codename} hand lens \u2014 ${state.abraded ? 'prepared patch' : 'unprepared surface'}`,
+      live.captureFrame?.(), stationId)
   },
 
   recordObservation: (stationId, choiceId) => {
@@ -958,13 +1048,15 @@ export const useStore = create<Store>((set, get) => ({
       (contextGood
         ? 'Field context recorded correctly, so the tube is worth the mass budget.'
         : 'No supported observation recorded here, so this tube arrives on Earth without the field context that gives it meaning. The rock is still useful. It is worth much less.'))
+    get().takePhoto(`${st.codename} borehole and tube \u2014 volume assessment frame`, live.captureFrame?.(), stationId)
   },
 
-  takePhoto: (label, dataUrl) => {
+  takePhoto: (label, dataUrl, stationId) => {
     const s = get()
+    const owner = stationId ?? s.nearStation
     const photo: Photo = {
       id: `ph-${s.photos.length + 1}`,
-      stationId: s.nearStation,
+      stationId: owner,
       label,
       evaSec: s.time.evaSec,
       ltst: s.clock.ltstHours,
@@ -973,8 +1065,8 @@ export const useStore = create<Store>((set, get) => ({
       dataUrl,
     }
     const stations = { ...s.stations }
-    if (s.nearStation) {
-      stations[s.nearStation] = { ...stations[s.nearStation], photos: stations[s.nearStation].photos + 1 }
+    if (owner && stations[owner]) {
+      stations[owner] = { ...stations[owner], photos: stations[owner].photos + 1 }
     }
     set({ photos: [...s.photos, photo], stations })
     get().pushLog('science',
@@ -1099,6 +1191,22 @@ export const useStore = create<Store>((set, get) => ({
 
     const lid = p.def.lesson.id
     if (!get().lessons.includes(lid)) set({ lessons: [...get().lessons, lid] })
+
+    // Finishing the last outstanding step at a station completes an objective,
+    // and a completed objective goes to Earth. Queued rather than started now,
+    // so the player reads the result card before the downlink takes the screen.
+    const sid =
+      c.type === 'abrade' || c.type === 'lens' || c.type === 'record' || c.type === 'core'
+        ? c.stationId
+        : null
+    if (sid) {
+      const stx = STATION_BY_ID(sid)
+      const ss = get().stations[sid]
+      const objectiveDone =
+        ss.abraded && ss.inspected && !!ss.choice && (ss.sampled || !stx.sampleable)
+      const alreadySent = get().feed.some((f) => f.title.startsWith(stx.codename))
+      if (objectiveDone && !alreadySent) set({ pendingDownlink: sid })
+    }
   },
 
   beginAbrade: (stationId) => {
@@ -1157,6 +1265,139 @@ export const useStore = create<Store>((set, get) => ({
     get().startProcedure(shelterActivity(s.advice?.shelter.name ?? 'local terrain'), { type: 'shelter' })
   },
 
+  // -------------------------------------------------------------------------
+  // The link home. Nothing is science until it is off the planet.
+  // -------------------------------------------------------------------------
+
+  startUplink: (title, subtitle, items) => {
+    const s = get()
+    if (s.uplink || s.outcome || !items.length) return
+    const bytes = items.reduce((a, i) => a + i.bytes, 0)
+    const modelledSec = transferSeconds(bytes)
+    // Long enough that the transfer reads as a transfer, short enough to watch.
+    const realSec = 16
+    const station = dsnStation(s.time.now)
+    set({
+      ui: null,
+      uplink: {
+        title, subtitle, items, bytes, realSec, modelledSec,
+        elapsed: 0, progress: 0, complete: false,
+        owltSec: s.link.owltSec,
+        startEvaSec: s.time.evaSec,
+        station,
+        narrated: -1,
+        returnUi: s.ui,
+      },
+    })
+    live.inputLocked = true
+    get().pushLog('comms',
+      `DOWNLINK QUEUED \u2014 ${title}. ${items.length} product(s), ${formatBytes(bytes)}. ` +
+      `UHF relay to orbiter, then ${station.name} on the Deep Space Network.`)
+  },
+
+  tickUplink: (dtRealSec) => {
+    const s = get()
+    const u = s.uplink
+    if (!u || u.complete) return
+    const elapsed = u.elapsed + dtRealSec
+    const progress = Math.min(1, elapsed / u.realSec)
+
+    let narrated = u.narrated
+    const si = activeStage(progress)
+    if (si > narrated) {
+      narrated = si
+      get().pushLog('comms', `${STAGES[si].label}. ${STAGES[si].detail}`)
+    }
+
+    if (progress < 1) {
+      set({ uplink: { ...u, elapsed, progress, narrated } })
+      return
+    }
+
+    // The packet is away. From here it is light time, and nothing can hurry it.
+    const sentEvaSec = get().time.evaSec
+    const post: FeedPost = {
+      id: `feed-${Math.round(sentEvaSec)}-${get().feed.length}`,
+      title: u.title,
+      body: u.subtitle,
+      items: u.items,
+      bytes: u.bytes,
+      sentEvaSec,
+      arriveEvaSec: sentEvaSec + u.owltSec,
+      owltSec: u.owltSec,
+      published: false,
+      station: u.station.name,
+    }
+    set({
+      uplink: { ...u, elapsed, progress: 1, complete: true, narrated },
+      feed: [...get().feed, post],
+    })
+    get().pushLog('comms',
+      `PACKET AWAY \u2014 ${u.title}, ${formatBytes(u.bytes)}. In flight for ` +
+      `${(u.owltSec / 60).toFixed(1)} min. It reaches ${u.station.name} at EVA +` +
+      `${(post.arriveEvaSec / 60).toFixed(0)} min, and there is nothing anyone can do to make that sooner.`)
+  },
+
+  dismissUplink: () => {
+    const u = get().uplink
+    if (!u) return
+    live.inputLocked = u.returnUi !== null
+    set({ uplink: null, ui: u.returnUi })
+  },
+
+  downlinkStation: (stationId) => {
+    const s = get()
+    const st = STATION_BY_ID(stationId)
+    const state = s.stations[stationId]
+    const items: UplinkItem[] = []
+    // The frames captured at this station, newest first, with their thumbnails.
+    const frames = s.photos.filter((p) => p.stationId === stationId)
+    for (const f of frames) {
+      items.push({
+        id: f.id, kind: 'frame', label: f.label, bytes: SIZES.frame, thumb: f.dataUrl,
+        note: `Sun ${f.sunElevationDeg.toFixed(0)}\u00b0 \u00b7 LTST ${f.ltst.toFixed(2)} h \u00b7 opacity ${f.tau.toFixed(2)}`,
+      })
+    }
+    if (state.abraded) {
+      items.push({
+        id: `${stationId}-patch`, kind: 'observation', label: `${st.codename} abrasion patch record`,
+        bytes: SIZES.observation, note: '50 mm patch, 8 mm deep, documented before contact',
+      })
+    }
+    if (state.inspected) {
+      items.push({
+        id: `${stationId}-lens`, kind: 'observation', label: `${st.codename} hand-lens frames`,
+        bytes: SIZES.frame * 0.4, note: state.abraded ? 'Prepared surface, shadowed' : 'Unprepared surface',
+      })
+    }
+    if (state.choice) {
+      const opt = st.observation.options.find((o) => o.id === state.choice)
+      items.push({
+        id: `${stationId}-obs`, kind: 'observation',
+        label: `${st.codename} field interpretation`,
+        bytes: SIZES.observation,
+        note: (state.choiceConfident ? 'Full confidence. ' : 'Caveated \u2014 unprepared surface. ') +
+          (opt?.text ?? ''),
+      })
+    }
+    if (state.sampled) {
+      items.push({
+        id: `${stationId}-tube`, kind: 'sample', label: `${st.sampleName} \u2014 tube manifest`,
+        bytes: SIZES.sample, note: 'Core sealed, serial logged against the field interpretation',
+      })
+    }
+    items.push({
+      id: `${stationId}-tlm`, kind: 'telemetry', label: 'Suit and environment telemetry',
+      bytes: SIZES.telemetry,
+      note: `O\u2082 ${(s.frac.o2 * 100).toFixed(0)}%, margin ${s.ret.marginMinutes.toFixed(0)} min, opacity ${s.env.dustOpticalDepth.toFixed(2)}`,
+    })
+    get().startUplink(
+      `${st.codename} station package`,
+      `${st.name}. ${st.tagline}`,
+      items,
+    )
+  },
+
   dismissProcedure: () => {
     const p = get().proc
     if (!p) return
@@ -1171,6 +1412,12 @@ export const useStore = create<Store>((set, get) => ({
     live.jack.tool = 'none'
     live.inputLocked = p.returnUi !== null
     set({ proc: null, ui: p.returnUi, timeScale: p.prevTimeScale })
+
+    const pending = get().pendingDownlink
+    if (pending) {
+      set({ pendingDownlink: null })
+      get().downlinkStation(pending)
+    }
   },
 
   finishEva: (code) => {
@@ -1399,3 +1646,15 @@ function buildOutcome(s: State, code?: OutcomeCode): Outcome {
 export { ROUTES, STATIONS, ROUTE_BY_ID, STATION_BY_ID }
 export { JACK_SUIT }
 export { dustSeasonFactor, seasonName, sunTimes }
+
+/**
+ * Development hook.
+ *
+ * Exposes the store on `window.__jack` under `vite dev` only, so that the
+ * project's own browser-driven tests can set up a mid-EVA situation (a worked
+ * station, a storm in progress) without walking half a kilometre first. It is
+ * stripped from production builds by the `import.meta.env.DEV` guard.
+ */
+if (import.meta.env.DEV) {
+  ;(window as unknown as { __jack?: unknown }).__jack = useStore
+}

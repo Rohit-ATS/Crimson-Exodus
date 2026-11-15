@@ -9,6 +9,7 @@ import DataPanel from './panels/DataPanel'
 import MapPanel from './panels/MapPanel'
 import RealSitePanel from './panels/RealSitePanel'
 import ProcedureOverlay from './ProcedureOverlay'
+import UplinkOverlay from './UplinkOverlay'
 import { useStore } from '../state/store'
 import { useSimLoop } from '../state/useSimLoop'
 import { installInput, onPress } from '../state/input'
@@ -25,7 +26,7 @@ export default function Surface() {
       const s = useStore.getState()
       // A running procedure owns the keyboard; ProcedureOverlay handles its own
       // Escape and Enter so that nothing else can fire underneath it.
-      if (s.proc) return
+      if (s.proc || s.uplink) return
       if (code === 'Escape') { s.setUi(null); return }
       if (s.ui !== null) return // panels own the keyboard while open
 
@@ -131,6 +132,7 @@ export default function Surface() {
       {ui === 'realsite' && <RealSitePanel onClose={() => useStore.getState().setUi(null)} />}
       {ui === 'data' && <DataPanel onClose={() => useStore.getState().setUi(null)} />}
       <ProcedureOverlay />
+      <UplinkOverlay />
     </div>
   )
 }
