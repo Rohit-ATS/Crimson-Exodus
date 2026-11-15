@@ -63,4 +63,13 @@ describe('GitHub Pages workflow', () => {
     assert.match(workflow, /id-token: write/)
     assert.match(workflow, /name: github-pages/)
   })
+
+  it('grants Pages API access before configure-pages runs in the build job', () => {
+    const topLevelPermissions = workflow.match(
+      /^permissions:\n([\s\S]*?)^concurrency:/m,
+    )?.[1] ?? ''
+    assert.match(topLevelPermissions, /^  contents: read$/m)
+    assert.match(topLevelPermissions, /^  pages: write$/m)
+    assert.match(topLevelPermissions, /^  id-token: write$/m)
+  })
 })
