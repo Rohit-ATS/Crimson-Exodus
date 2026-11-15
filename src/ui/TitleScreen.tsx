@@ -30,6 +30,10 @@ export default function TitleScreen() {
       const target = event.target
       if (target instanceof HTMLElement && target.closest('button, input, textarea, select, a, [contenteditable="true"]')) return
 
+      // A dialog owns the keyboard while it is up. Without this, Enter starts
+      // the mission behind an open survival guide.
+      if (showGuide) return
+
       if (event.code === 'Enter' || event.code === 'NumpadEnter') {
         event.preventDefault()
         startBriefing()
@@ -40,7 +44,7 @@ export default function TitleScreen() {
     }
     window.addEventListener('keydown', handleShortcut)
     return () => window.removeEventListener('keydown', handleShortcut)
-  }, [startBriefing])
+  }, [startBriefing, showGuide])
 
   const now = new Date()
   const link = linkGeometry(now)

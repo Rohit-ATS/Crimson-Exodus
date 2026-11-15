@@ -119,11 +119,32 @@ about that. It shows the public, and a student, what a Marswalk actually costs,
 and it makes the resolution gap between orbital data and a footpath visible
 rather than hiding it.
 
+**What we did to make this survive a judging table:** guidance that teaches one
+thing at a time from the current mission state and retires the moment you act on
+it; a renderer that measures its own frame time and picks a quality tier so an
+unknown laptop is not a gamble; a settings panel that states what the build does
+*not* do for accessibility rather than implying it does everything; and a
+downloadable mission card so the run leaves with the player.
+
 **What would have to change for real use:** a HiRISE stereo DTM in place of the
 synthetic height field, validated suit consumable curves in place of our reasoned
 game model, a real DSN link schedule in place of straight-line light time, and
 per-step hazard assessment that no orbital product can currently provide. We have
 written down exactly which parts those are.
+
+---
+
+## If you only have ninety seconds
+
+Click **Two-minute demo** on the title screen. It drops straight onto the
+surface on the route that visits all three stations, auto-traverse already
+walking, the clock at 30x, with a regional dust front scheduled. It reaches the
+first station with a storm watch running in about twenty-five seconds. Press
+**F** there and you are inside the thing this project is actually about.
+
+Click **Mars survival guide** instead and you get the whole educational payload
+without playing at all: fifteen sourced entries, ordered by how fast each thing
+kills you.
 
 ---
 

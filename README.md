@@ -83,6 +83,7 @@ never touches the network.
 | `P` | Auto-traverse |
 | `Space` | Pause |
 | `O` | Mission objectives and your Mars field guide |
+| `F1` or `?` | Controls, render quality and accessibility |
 | `K` | Data details and disclosure |
 | `R` | Swap consumables at a depot in reach |
 | `Enter` | Ingress at the lander and end the EVA |
@@ -164,15 +165,77 @@ samples", but why a tube with no recorded field context arrives on Earth as a
 rock with no story, and why the reserve is the thing that keeps a surprise from
 becoming a fatality.
 
+### Ninety seconds is all you get
+
+Someone opens the link, gives it ninety seconds, and decides. Three things
+exist purely to survive that.
+
+**Proof on the first screen.** Four real NASA frames sit under the pitch,
+credited by PIA number — the same images the procedures reveal. The hardest
+claim to establish quickly is that the data here is not decoration.
+
+**A two-minute demo.** A full run is a briefing, a route plan and an EVA, about
+eight minutes. The demo button drops straight onto the surface on the route that
+visits all three stations, auto-traverse already walking, clock at 30×, with a
+regional dust front scheduled. It reaches the first station with a storm watch
+running in about 25 seconds. `P` takes the controls back at any point.
+
+**Guidance that teaches rather than instructs.** One contextual card at a time,
+chosen from the current mission state, sitting in the HUD column where the eye
+already is. It never blocks anything, retires the instant the player does the
+thing, and says *why* as well as what — "press F, because a station is four real
+field procedures and this is the game". One control on the card turns it off
+forever.
+
+### It adapts to the machine it is running on
+
+A fixed render setting is a gamble on unknown hardware. The renderer measures
+its own frame time and moves between three quality tiers, adjusting pixel ratio,
+shadow map size and the ground-litter radius. It takes a median over a 90-frame
+window so one shader-compile hitch cannot trigger a downgrade, downgrades after
+two bad windows, upgrades only after five good ones, and stops trying after two
+attempts — a quality controller that oscillates is worse than one that is simply
+wrong. The measured frame time is shown in the settings panel, so the choice is
+informed rather than a guess.
+
+Settings also carry HUD scale for projectors, reduced motion defaulted from the
+operating system's own preference, and an accessibility section that says what
+this build does *not* do.
+
+### You can take it with you
+
+The debrief renders the run as a single portrait card — outcome, the numbers
+that decided it, the best frame you actually captured on Mars with its Sun angle
+and dust opacity, and the survival notes you earned. Drawn locally with the 2D
+canvas API; nothing is uploaded. NASA credit is rendered onto the image itself,
+so a card that gets reposted still carries its attribution.
+
 ### The field guide is the point
 
-The second tab of the objectives panel is a survival manual you build by
-playing. Every procedure actually carried out adds the one thing about it worth
-remembering if you were the one standing there, with its source, in the order
-you learned it. Nothing is added for reading about it — you have to do the
-thing. Ten entries, from what dust does to seals and lungs, through why you
-cannot lean on a tool at 0.38 g, to why Earth cannot help you with the next ten
-minutes. It is repeated in full at the debrief.
+The brief is an *Interplanetary Survival Guide*, so the complete guide is one
+click from the title screen and readable by someone who never presses a key. It
+is organised by how fast each thing kills you:
+
+| | |
+|---|---|
+| **Seconds** | Surface pressure is below the Armstrong limit — water boils at body temperature. The suit is not clothing, it is a spacecraft. |
+| **Minutes** | You can suffocate with a full oxygen tank. CO₂ takes your judgement before it takes your consciousness, so the first thing you lose is the ability to notice. |
+| **Hours** | The battery is the heater; a dead battery means freezing with oxygen left to breathe. The reserve is what keeps a surprise from becoming a fatality. Mass you carry is mass you breathe for. Pre-positioned supplies are what create range. |
+| **The whole time** | Dust, at a few micrometres and loaded with perchlorate, is what actually breaks seals, optics, radiators and lungs. RAD measured 0.2–0.3 mSv a day on the ground, and a suit stops almost none of it — mass is the only shielding. |
+| **When it goes wrong** | No GPS and no magnetic compass, so a dust event is a navigation emergency first. And Earth cannot help you with the next ten minutes. |
+| **Doing the work** | The outside of a Mars rock is not the rock. You cannot lean on a tool at 0.38 g. Shade the thing you are trying to see. A close-up with no wide shot is nearly worthless. |
+
+Fifteen entries, every one sourced. In play they are handed out one at a time —
+and not only by procedures. Four are awarded by the planet: a solar particle
+event, a cold run that drives the heaters, a scrubber past half, visibility
+under three kilometres. A fact you met while your oxygen was draining is a fact
+you keep.
+
+The EVA ends with a procedure too. Ingress is five beats — clean down outside
+because every gram through the hatch lives in the habitat forever, seal,
+repressurise from 7 millibars with the Armstrong limit marked in red on the
+gauge, equalise before cracking the helmet, and log what came back in the tanks,
+because that is what tomorrow gets planned against.
 
 If a player remembers nothing else from this project, it should be those three:
 **the reserve is what keeps a surprise from becoming a fatality; dust is the
@@ -352,14 +415,20 @@ src/
     forecast.ts      Pre-walk consumables forecast
     activity.ts      Procedures: beats, costs, NASA imagery, survival lessons
     objectives.ts    The mission, in three tiers, derived from state
+    coaching.ts      Contextual guidance, chosen from mission state
   three/             Terrain, far horizon, sky, rocks, Jack, lander, flag, dust, scene
                      MarsEnvironment.tsx  image-based lighting from the Mars sky
                      NearClasts.tsx       camera-following ground litter
+                     AdaptiveQuality.tsx  measures frame time, picks a tier
   ui/                Title, briefing, planner, HUD, panels, debrief
                      ProcedureOverlay.tsx  animated procedures and result cards
                      UplinkOverlay.tsx     the downlink to Earth
+                     Coach.tsx             one guidance card at a time
+                     missionReport.ts      the shareable card, drawn on canvas
+                     panels/SurvivalGuide.tsx  the full guide, no play required
     map/             Local raster layers, NASA Trek tiles, elevation profile
   state/             Zustand store, fixed-step sim loop, input
+                     settings.ts  quality, accessibility, persisted preferences
   data/              ISO 3166-1 flags, flag textures, nasaGallery.ts (bundled NASA
                      imagery with credits), realSite.ts (HiRISE DTM loader,
                      Trek tiles, CRISM projection, Perseverance traverse and images)
