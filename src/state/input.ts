@@ -27,6 +27,7 @@ export function installInput(): () => void {
   const SWALLOW = new Set([
     'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyF', 'KeyC', 'KeyG',
     'KeyB', 'KeyM', 'KeyT', 'KeyK', 'KeyH', 'KeyV', 'KeyP', 'KeyR', 'KeyN', 'KeyO',
+    'F1', 'Slash',
     'Space', 'Enter', 'NumpadEnter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
   ])
 

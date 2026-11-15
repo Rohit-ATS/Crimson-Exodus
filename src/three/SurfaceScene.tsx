@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useStore } from '../state/store'
 import { live } from '../state/live'
+import { renderTier, useSettings } from '../state/settings'
 import { heightAt } from '../mission/terrain'
 import Terrain from './Terrain'
 import FarTerrain from './FarTerrain'
@@ -12,6 +13,7 @@ import Jack from './Jack'
 import Lander from './Lander'
 import Sky from './Sky'
 import MarsEnvironment from './MarsEnvironment'
+import AdaptiveQuality from './AdaptiveQuality'
 import RouteLine from './RouteLine'
 import Markers from './Markers'
 import FlagMesh from './FlagMesh'
@@ -96,7 +98,7 @@ export default function SurfaceScene() {
   return (
     <Canvas
       shadows
-      dpr={[1, 2]}
+      dpr={[1, renderTier.current.dprMax]}
       gl={{ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true }}
       camera={{ fov: 58, near: 0.1, far: 12000, position: [0, 6, 20] }}
       onCreated={({ gl, scene }) => {
@@ -161,6 +163,7 @@ export default function SurfaceScene() {
         driftDeg={env.windFromDeg}
       />
 
+      <AdaptiveQuality />
       <CameraRig />
       <FrameCapture />
     </Canvas>
@@ -201,6 +204,24 @@ function FrameCapture() {
 function SunLight({ dir, color, intensity }: { dir: THREE.Vector3; color: THREE.Color; intensity: number }) {
   const light = useRef<THREE.DirectionalLight>(null)
   const target = useMemo(() => new THREE.Object3D(), [])
+  const quality = useSettings((s) => s.quality)
+  const autoTier = useSettings((s) => s.autoTier)
+
+  // Resize the shadow map when the quality tier changes. Three allocates the
+  // render target lazily, so dropping the existing one is enough to make it
+  // rebuild at the new size on the next frame.
+  useEffect(() => {
+    const l = light.current
+    if (!l) return
+    const size = renderTier.current.shadowMap
+    l.castShadow = size > 0
+    if (size > 0 && l.shadow.mapSize.width !== size) {
+      l.shadow.mapSize.set(size, size)
+      l.shadow.map?.dispose()
+      // `map` is typed as non-null but Three itself reallocates from null here.
+      ;(l.shadow as unknown as { map: unknown }).map = null
+    }
+  }, [quality, autoTier])
 
   useFrame(() => {
     const l = light.current

@@ -192,7 +192,7 @@ export interface LogEntry {
   text: string
 }
 
-export type UiPanel = null | 'comms' | 'backpack' | 'science' | 'flag' | 'data' | 'rules' | 'map' | 'realsite' | 'objectives'
+export type UiPanel = null | 'comms' | 'backpack' | 'science' | 'flag' | 'data' | 'rules' | 'map' | 'realsite' | 'objectives' | 'settings'
 
 export type OutcomeCode =
   | 'returned-nominal'
@@ -1656,5 +1656,9 @@ export { dustSeasonFactor, seasonName, sunTimes }
  * stripped from production builds by the `import.meta.env.DEV` guard.
  */
 if (import.meta.env.DEV) {
-  ;(window as unknown as { __jack?: unknown }).__jack = useStore
+  const w = window as unknown as { __jack?: unknown; __live?: unknown }
+  w.__jack = useStore
+  // The camera and Jack's transform live outside React, so a test that wants a
+  // deterministic viewpoint needs this too.
+  w.__live = live
 }

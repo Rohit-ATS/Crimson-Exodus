@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
+import { useSettings } from '../state/settings'
 
 /**
  * The HUD is laid out for roughly 1500 x 880 CSS px. On a smaller laptop or a
@@ -20,13 +21,17 @@ function compute(): number {
 }
 
 export function useHudScale(): CSSProperties {
-  const [scale, setScale] = useState(compute)
+  const [auto, setAuto] = useState(compute)
+  const manual = useSettings((s) => s.hudScale)
   useEffect(() => {
-    const on = () => setScale(compute())
+    const on = () => setAuto(compute())
     window.addEventListener('resize', on)
     return () => window.removeEventListener('resize', on)
   }, [])
-  if (scale >= 1) return {}
+  // The automatic fit stops panels overlapping; the manual setting is the
+  // player's own preference on top of it.
+  const scale = Math.round(auto * manual * 100) / 100
+  if (scale >= 0.995 && scale <= 1.005) return {}
   return {
     zoom: scale,
     right: 'auto',

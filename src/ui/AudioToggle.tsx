@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { marsAudio } from '../sim/audio'
 import { useStore } from '../state/store'
+import { useSettings } from '../state/settings'
 
 /**
  * Audio is off until the player asks for it, because browsers refuse to start
@@ -8,7 +9,10 @@ import { useStore } from '../state/store'
  * should not start making noise on its own.
  */
 export default function AudioToggle() {
-  const [on, setOn] = useState(false)
+  // Shared with the settings panel, so the two controls can never disagree
+  // about whether the sound is on.
+  const on = useSettings((s) => s.audio)
+  const setOn = useSettings((s) => s.setAudio)
   const [failed, setFailed] = useState(false)
   const env = useStore((st) => st.env)
 

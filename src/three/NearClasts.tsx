@@ -37,6 +37,7 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { heightAt, roughnessAt, slopeDeg } from '../mission/terrain'
 import { live } from '../state/live'
+import { renderTier } from '../state/settings'
 
 /** Integer hash. Math.imul keeps every product inside 32 bits. */
 function hash3(x: number, y: number, k: number): number {
@@ -94,6 +95,8 @@ interface LayerSpec {
    * forty metres away, where nothing can see it.
    */
   stride: number
+  /** True for the boot-scale layer, which the lowest tier drops. */
+  gritLayer: boolean
   seed: number
   geometry: THREE.BufferGeometry
   castShadow: boolean
@@ -103,6 +106,7 @@ function Layer({ spec, material }: { spec: LayerSpec; material: THREE.Material }
   const n = (spec.half * 2 + 1) * (spec.half * 2 + 1)
   const mesh = useRef<THREE.InstancedMesh>(null)
   const origin = useRef<[number, number]>([NaN, NaN])
+  const halfRef = useRef(0)
 
   const scratch = useMemo(() => ({
     m: new THREE.Matrix4(),
@@ -116,23 +120,32 @@ function Layer({ spec, material }: { spec: LayerSpec; material: THREE.Material }
   useFrame(() => {
     const im = mesh.current
     if (!im) return
+    // A low tier draws a tighter window, and skips the grit layer entirely.
+    const q = renderTier.current
+    if (spec.gritLayer && !q.grit) {
+      if (im.count !== 0) { im.count = 0; im.instanceMatrix.needsUpdate = true }
+      origin.current = [NaN, NaN]
+      return
+    }
+    const half = Math.max(6, Math.round(spec.half * q.clastScale))
     const st = spec.stride
     const cx = Math.round(live.jack.x / spec.cell / st) * st
     const cz = Math.round(live.jack.z / spec.cell / st) * st
     // Only rebuild when the window has actually slid to a new cell.
-    if (origin.current[0] === cx && origin.current[1] === cz) return
+    if (origin.current[0] === cx && origin.current[1] === cz && halfRef.current === half) return
     origin.current = [cx, cz]
+    halfRef.current = half
 
     let i = 0
-    for (let gz = -spec.half; gz <= spec.half; gz++) {
-      for (let gx = -spec.half; gx <= spec.half; gx++) {
+    for (let gz = -half; gz <= half; gz++) {
+      for (let gx = -half; gx <= half; gx++) {
         const ix = cx + gx
         const iz = cz + gz
         const x = ix * spec.cell
         const z = iz * spec.cell
 
         // Circular window, so the layer has no visible square edge.
-        if (gx * gx + gz * gz > spec.half * spec.half) { im.setMatrixAt(i++, scratch.hidden); continue }
+        if (gx * gx + gz * gz > half * half) { im.setMatrixAt(i++, scratch.hidden); continue }
 
         // Keep the landing pad itself swept.
         if (Math.hypot(x, z) < 9) { im.setMatrixAt(i++, scratch.hidden); continue }
@@ -219,12 +232,12 @@ export default function NearClasts({ dust = 0 }: { dust?: number }) {
   const specs = useMemo<LayerSpec[]>(() => [
     {
       cell: 1.1, half: 36, minR: 0.03, maxR: 0.3,
-      base: 0.26, floor: 0.17, maxP: 0.9, terrainDriven: true, stride: 3,
+      base: 0.26, floor: 0.17, maxP: 0.9, terrainDriven: true, stride: 3, gritLayer: false,
       seed: 101, geometry: geoCobble, castShadow: true,
     },
     {
       cell: 0.3, half: 34, minR: 0.008, maxR: 0.034,
-      base: 0.4, floor: 0.4, maxP: 0.4, terrainDriven: false, stride: 5,
+      base: 0.4, floor: 0.4, maxP: 0.4, terrainDriven: false, stride: 5, gritLayer: true,
       seed: 509, geometry: geoGrit, castShadow: false,
     },
   ], [geoCobble, geoGrit])

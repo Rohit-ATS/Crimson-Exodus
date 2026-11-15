@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { useStore } from './state/store'
+import { useSettings } from './state/settings'
 import TitleScreen from './ui/TitleScreen'
 import Briefing from './ui/Briefing'
 
@@ -70,6 +71,13 @@ function Booting({ phase }: { phase: string }) {
 
 export default function App() {
   const phase = useStore((s) => s.phase)
+  const reducedMotion = useSettings((s) => s.reducedMotion)
+
+  // Reduced motion is a document-level switch so it reaches every screen,
+  // including the ones rendered through portals and lazy chunks.
+  useEffect(() => {
+    document.documentElement.classList.toggle('reduced-motion', reducedMotion)
+  }, [reducedMotion])
   const [data, setData] = useState(false)
   // Bumping this remounts the lazy subtree, which retries a failed chunk fetch.
   const [boundaryKey, setBoundaryKey] = useState(0)

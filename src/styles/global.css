@@ -385,3 +385,27 @@ h1, h2, h3, h4 { margin: 0 0 8px; }
 ul { margin: 0 0 9px; padding-left: 18px; }
 li { line-height: 1.5; margin-bottom: 4px; }
 a { color: var(--cyan); }
+
+
+/* ---------------------------------------------------------------------------
+   Reduced motion.
+
+   Set from the settings panel, and defaulted from the operating system's own
+   preference. This disables the decorative motion only: the scanline sweep,
+   the pulsing critical chips, the panel entry animations and the title
+   starfield drift. The simulation, the 3D scene and every readout are
+   unchanged, because slowing those down would change what the game is telling
+   you rather than how comfortable it is to look at.
+--------------------------------------------------------------------------- */
+.reduced-motion *,
+.reduced-motion *::before,
+.reduced-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+.reduced-motion .sweep::after,
+.reduced-motion .scanlines::after {
+  display: none !important;
+}
