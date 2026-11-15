@@ -32,7 +32,7 @@
  * distribution, not a measured one.
  */
 
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { heightAt, roughnessAt, slopeDeg } from '../mission/terrain'
@@ -105,6 +105,7 @@ interface LayerSpec {
 function Layer({ spec, material }: { spec: LayerSpec; material: THREE.Material }) {
   const n = (spec.half * 2 + 1) * (spec.half * 2 + 1)
   const mesh = useRef<THREE.InstancedMesh>(null)
+  const lastMesh = useRef<THREE.InstancedMesh | null>(null)
   const origin = useRef<[number, number]>([NaN, NaN])
   const halfRef = useRef(0)
 
@@ -120,6 +121,15 @@ function Layer({ spec, material }: { spec: LayerSpec; material: THREE.Material }
   useFrame(() => {
     const im = mesh.current
     if (!im) return
+    // React Three Fiber may replace an object when one of its constructor
+    // args changes. A replacement has empty instance matrices, so invalidate
+    // the spatial cache and repopulate it even when Jack has not crossed a
+    // window boundary since the previous frame.
+    if (lastMesh.current !== im) {
+      lastMesh.current = im
+      origin.current = [NaN, NaN]
+      halfRef.current = 0
+    }
     // A low tier draws a tighter window, and skips the grit layer entirely.
     const q = renderTier.current
     if (spec.gritLayer && !q.grit) {
@@ -214,20 +224,28 @@ export default function NearClasts({ dust = 0 }: { dust?: number }) {
   const geoCobble = useMemo(() => clast(1, 0.62, 4821), [])
   const geoGrit = useMemo(() => clast(0, 0.85, 9137), [])
 
+  // Keep the material identity stable. Passing a freshly-created material in
+  // `args` makes R3F reconstruct the InstancedMesh; the old spatial cache then
+  // incorrectly says its matrices are already populated, producing the
+  // all-at-once rock flicker seen while the dust value changes during motion.
   const material = useMemo(() => {
     // Clasts at Jezero are basaltic: darker than the dust that coats
     // everything, which is exactly why a swept rock reads dark against a
     // dusty plain.
-    const base = new THREE.Color(0x5b4433)
-    const dusty = new THREE.Color(0x8c6545)
     return new THREE.MeshStandardMaterial({
-      color: base.clone().lerp(dusty, 0.34 + dust * 0.32),
+      color: 0x5b4433,
       roughness: 0.94,
       metalness: 0,
       flatShading: true,
       envMapIntensity: 0.7,
     })
-  }, [dust])
+  }, [])
+
+  useEffect(() => {
+    const base = new THREE.Color(0x5b4433)
+    const dusty = new THREE.Color(0x8c6545)
+    material.color.copy(base).lerp(dusty, 0.34 + dust * 0.32)
+  }, [dust, material])
 
   const specs = useMemo<LayerSpec[]>(() => [
     {
