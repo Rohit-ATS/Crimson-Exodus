@@ -82,8 +82,102 @@ never touches the network.
 | `V` | First / third person |
 | `P` | Auto-traverse |
 | `Space` | Pause |
+| `O` | Mission objectives and your Mars field guide |
 | `K` | Data details and disclosure |
+| `R` | Swap consumables at a depot in reach |
+| `Enter` | Ingress at the lander and end the EVA |
 | `Esc` | Close a panel |
+
+---
+
+## Nothing here is a button that flips a checkbox
+
+The first version of this had a station panel with four buttons. You clicked
+"Abrade", a tick appeared, and you learned exactly one thing: that the game
+accepted a click. You did not learn that abrading a rock on Mars means bracing
+a rotary-percussive tool in a third of Earth's gravity, grinding a circle about
+5 cm across and 8 mm deep, and then blowing the tailings out of the hole with
+puffs of nitrogen — because a brush would smear dust back across the one
+surface you cut it to see.
+
+So every action that costs mission time runs as a **procedure**:
+
+1. **An animated schematic** of the tool and the rock, drawn as a pure function
+   of progress so the picture and the checklist cannot drift apart. The
+   abrading bit descends and spins, tailings build up, the gas Dust Removal
+   Tool blows the patch clear. The coring bit jitters while it cuts
+   percussively, the core fills the tube, the tube seals. The hand lens only
+   comes into focus if you cleared the rind first.
+2. **A cuff checklist** that ticks through real beats, each saying why it is
+   done that way, narrated into the mission log as it happens.
+3. **The real cost, charged while it plays.** The mission clock runs compressed
+   and says so on screen, so the minutes really are spent out of your oxygen,
+   your battery and your walk home. Abandoning part-way costs the time and
+   commits nothing, exactly as in the field.
+4. **A result card** carrying the real NASA image of that same operation being
+   done on Mars, credited on the image.
+5. **One survival note** worth remembering if you are ever standing there.
+
+### Then it goes to Earth
+
+Completing a station's field work packages everything you produced and
+downlinks it, shown as the two-hop journey it actually is:
+
+```
+suit  --UHF, up to 2 Mbit/s-->  relay orbiter  --X-band-->  Deep Space Network
+```
+
+The overlay assembles the packet, acquires the orbiter, fills a transfer bar
+while each product goes up in turn with its thumbnail resolving as it
+completes, hands off to store-and-forward — and then stops being a progress bar
+at all, because the last leg is light time and nothing can hurry it. The post
+sits in the NASA feed marked **IN FLIGHT** with a live countdown computed from
+the real planetary geometry, and publishes itself when the light has crossed
+the distance. The receiving complex is chosen by real Earth longitude, so it is
+genuinely Goldstone, Madrid or Canberra depending on when you play.
+
+Beside the transfer it prints what the same packet would cost direct to Earth:
+tens of kilobits per second against two megabits. That thousandfold gap is the
+whole reason Mars missions fly relay orbiters, and it only lands if you see
+both numbers next to each other.
+
+The products are real captures. The abrade procedure's last beat is documenting
+the fresh patch before anything touches it; the lens procedure images the
+prepared surface; the core procedure takes a volume-assessment frame before
+sealing. All three capture an actual frame from the scene, tagged to that
+station with its Sun angle, local true solar time and dust opacity. Those are
+the thumbnails you watch go up.
+
+### And you always know what the mission wants
+
+Objectives are stated in three tiers and tracked continuously, with a strip
+above the log that never goes away and `O` for the full breakdown:
+
+| Tier | Meaning |
+|---|---|
+| **Critical** | Jack comes home alive with the reserve unspent. There is no partial credit for a dead astronaut holding good rocks. |
+| **Primary** | Answer the science question on a prepared surface, get the data off the planet, bring back one core with its context. **Any one** of these is mission success. |
+| **Bonus** | The other two stations, the depot, the flag, handling the weather without spending the reserve. |
+
+Every objective carries a *why it matters out there* line. Not "collect 3
+samples", but why a tube with no recorded field context arrives on Earth as a
+rock with no story, and why the reserve is the thing that keeps a surprise from
+becoming a fatality.
+
+### The field guide is the point
+
+The second tab of the objectives panel is a survival manual you build by
+playing. Every procedure actually carried out adds the one thing about it worth
+remembering if you were the one standing there, with its source, in the order
+you learned it. Nothing is added for reading about it — you have to do the
+thing. Ten entries, from what dust does to seals and lungs, through why you
+cannot lean on a tool at 0.38 g, to why Earth cannot help you with the next ten
+minutes. It is repeated in full at the debrief.
+
+If a player remembers nothing else from this project, it should be those three:
+**the reserve is what keeps a surprise from becoming a fatality; dust is the
+thing that actually breaks equipment and lungs; and Earth cannot help you with
+the next ten minutes.**
 
 ---
 
@@ -248,6 +342,7 @@ src/
     weather.ts       Dust devils and regional storms, phased, seasonally weighted
     consumables.ts   Portable life support: O2, CO2 scrubber, battery, feedwater
     comms.ts         The Earth link and its delay
+    downlink.ts      Two-hop relay model: UHF to orbiter, X-band to the DSN
     hazard.ts        Planning cues and shelter recommendation
     radiation.ts     RAD-anchored GCR background and solar particle events
   mission/
@@ -255,22 +350,33 @@ src/
     site.ts          Jezero: stations, routes, shelters, provenance
     path.ts          Route sampling, cost, return estimates
     forecast.ts      Pre-walk consumables forecast
+    activity.ts      Procedures: beats, costs, NASA imagery, survival lessons
+    objectives.ts    The mission, in three tiers, derived from state
   three/             Terrain, far horizon, sky, rocks, Jack, lander, flag, dust, scene
+                     MarsEnvironment.tsx  image-based lighting from the Mars sky
+                     NearClasts.tsx       camera-following ground litter
   ui/                Title, briefing, planner, HUD, panels, debrief
+                     ProcedureOverlay.tsx  animated procedures and result cards
+                     UplinkOverlay.tsx     the downlink to Earth
     map/             Local raster layers, NASA Trek tiles, elevation profile
   state/             Zustand store, fixed-step sim loop, input
-  data/              ISO 3166-1 flags, flag textures, realSite.ts (HiRISE DTM loader,
+  data/              ISO 3166-1 flags, flag textures, nasaGallery.ts (bundled NASA
+                     imagery with credits), realSite.ts (HiRISE DTM loader,
                      Trek tiles, CRISM projection, Perseverance traverse and images)
 public/data/         Bundled HiRISE DTM window, CRISM browse, Perseverance waypoints
-public/nasa/         Bundled Perseverance and CRISM photojournal images
+public/nasa/         23 bundled NASA/JPL images: abrasion patches, WATSON at hand-lens
+                     scale, PIXL chemistry, a core in its tube, the Three Forks depot,
+                     DSN antennas at Madrid, a MARCI dust storm, the delta panorama
 ```
 
 One height field serves the 3D mesh, the map, the elevation profile, the cost
 model and the hazard raster, so the plan and the walk can never disagree.
 
 **Stack:** React 18 + TypeScript + Vite, Three.js via react-three-fiber, Zustand.
-No art assets are loaded: the terrain, astronaut, lander, sky and dust are all
-geometry and shaders generated at runtime.
+No art assets are loaded: the terrain, astronaut, lander, sky, ground litter and
+dust are all geometry and shaders generated at runtime. The only bundled images
+are the NASA ones, and they are only ever shown as what they are — real
+photographs of Mars, credited on the image — never as the game's own scenery.
 
 ---
 

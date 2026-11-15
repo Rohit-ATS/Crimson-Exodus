@@ -34,7 +34,8 @@ long-lived lake, and do its fine-grained beds preserve organic carbon?* Three
 stations, each modelled on a real feature — Kodiak, Hogwallow Flats / Bright
 Angel, and the Séítah igneous floor.
 
-*Visual: the briefing screen, mission tab.*
+*Visual: the briefing screen, mission tab, then the objectives panel [O] —
+critical, primary and bonus, with a "why it matters out there" line on each.*
 
 ### 4 — The data
 Five NASA missions (MRO, Mars 2020, Curiosity, Viking, Mars Global Surveyor), layered at the scale of a footpath. The **real-site map**: the
@@ -56,6 +57,25 @@ number in the app carries one of four provenance labels.
 and its real profile — then the orange true-scale box on the global map.*
 
 ### 5 — The interaction
+**Nothing in this game is a button that flips a checkbox.** Every action that
+costs mission time plays as a procedure: an animated schematic of the tool and
+the rock, a cuff checklist that says why each beat is done that way, the
+mission clock visibly compressed so the minutes really come out of the oxygen
+and the walk home, and then a result card carrying the **real NASA image of
+that same operation being done on Mars**, credited on the image. Abrading means
+grinding a 5 cm circle 8 mm deep and blowing the tailings clear with nitrogen,
+because a brush would smear dust back across the surface you cut it to see —
+and the player sees Perseverance's actual abrasion patches at Skinner Ridge and
+Wildcat Ridge the moment they finish doing it themselves.
+
+Finishing a station's field work downlinks the whole package, shown as the
+two-hop journey it really is: UHF to a relay orbiter at 2 Mbit/s, X-band to the
+Deep Space Network, then the part no progress bar can honestly animate — minutes
+of flight time at the speed of light. The post sits in the NASA feed marked IN
+FLIGHT with a live countdown from the real planetary geometry and publishes
+itself when the light arrives. Beside it: what the same packet would cost direct
+to Earth, a thousand times slower. That gap is why relay orbiters exist.
+
 Three routes, three real trades: all the science and the most ground; the short
 gentle valley that funnels dust and loses visibility first; the climb that buys
 sightlines with 91 m of ascent. The planner forecasts consumables along the route
@@ -66,7 +86,10 @@ Choosing the route changes the guide line on the ground, the elevation profile,
 the hazard raster and the live return estimate, because all five read the same
 sampled path.
 
-*Visual: switch routes in the planner; margins and the profile change live.*
+*Visual: abrade a patch — watch the bit spin, the tailings build, the nitrogen
+puff clear the patch — then the real PIA24926 abrasion patches appear. Then the
+downlink bar fills with the frames you just took, and stops at IN FLIGHT with
+10 minutes on the clock.*
 
 ### 6 — The result
 A dust storm arrives. It does not knock Jack over — the HUD shows, live, that a
@@ -83,6 +106,14 @@ of them; the cabin stops most. Outside for the whole event: ~10 mSv. Inside: ~1 
 *Visual: storm peak, the radiation banner, the abort recommendation, then the debrief.*
 
 ### 7 — Impact and next step
+**The thing we actually want someone to walk away with is a survival guide.**
+The objectives panel has a second tab that fills up only from procedures the
+player actually carried out — ten sourced entries on what kills you on Mars and
+in what order, repeated in full at the debrief. If a player remembers nothing
+else: the reserve is what keeps a surprise from becoming a fatality, dust is
+what actually breaks equipment and lungs, and Earth cannot help you with the
+next ten minutes.
+
 This is a communication and training prototype, and it is deliberately honest
 about that. It shows the public, and a student, what a Marswalk actually costs,
 and it makes the resolution gap between orbital data and a footpath visible

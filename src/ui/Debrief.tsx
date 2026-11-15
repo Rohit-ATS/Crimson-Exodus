@@ -9,6 +9,9 @@ import { JACK_SUIT } from '../sim/consumables'
 import { ROUTES, STATIONS } from '../mission/site'
 import { flagUrl } from '../data/countries'
 import { formatDelay } from '../sim/comms'
+import { formatBytes } from '../sim/downlink'
+import { LESSONS } from '../mission/activity'
+import { missionStatus } from '../mission/objectives'
 
 export default function Debrief() {
   const s = useStore()
@@ -17,6 +20,8 @@ export default function Debrief() {
   const o = s.outcome
   const sci = useMemo(() => scienceScore(s), [s])
   const route = ROUTES.find((r) => r.id === s.routeId)!
+  const mission = useMemo(() => missionStatus(s), [s])
+  const learned = s.lessons.map((id) => LESSONS[id]).filter(Boolean)
 
   const visited = useMemo(
     () => Object.fromEntries(Object.entries(s.stations).map(([k, v]) => [k, !!v.choice])),
@@ -171,11 +176,119 @@ export default function Debrief() {
               )}
             </Panel>
 
+            {/* Objectives: what the mission asked for, and what it got */}
+            <Panel
+              title="Mission objectives"
+              style={{ gridColumn: '1 / -1' }}
+              right={
+                <Chip tone={mission.primaryDone >= 1 ? 'nominal' : 'caution'}>
+                  {mission.primaryDone}/{mission.primaryTotal} primary &middot;{' '}
+                  {mission.bonusDone}/{mission.bonusTotal} bonus
+                </Chip>
+              }
+            >
+              <div style={{ display: 'grid', gap: 7, gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))' }}>
+                {[...mission.critical, ...mission.primary, ...mission.bonus].map((ob) => (
+                  <div
+                    key={ob.id}
+                    style={{
+                      borderLeft: `3px solid ${ob.done ? 'var(--lime)' : 'var(--faint)'}`,
+                      paddingLeft: 9, opacity: ob.done ? 1 : 0.62,
+                    }}
+                  >
+                    <div className="row gap6" style={{ alignItems: 'baseline' }}>
+                      <span className="mono" style={{ fontSize: 11, color: ob.done ? 'var(--lime)' : 'var(--faint)' }}>
+                        {ob.done ? '\u2713' : '\u2014'}
+                      </span>
+                      <span style={{ fontSize: 13 }}>{ob.title}</span>
+                    </div>
+                    <div className="src">{ob.detail}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="src" style={{ marginTop: 8 }}>
+                One primary objective is mission success. A real EVA that achieves one of its
+                objectives and walks home is a successful EVA.
+              </div>
+            </Panel>
+
+            {/* What went to Earth */}
+            {s.feed.length > 0 && (
+              <Panel title="What reached Earth" style={{ gridColumn: '1 / -1' }}>
+                <div className="stack gap6">
+                  {s.feed.map((f) => (
+                    <div key={f.id} style={{ borderLeft: `3px solid ${f.published ? 'var(--lime)' : 'var(--amber)'}`, paddingLeft: 9 }}>
+                      <div className="row between gap8 wrap">
+                        <span style={{ fontSize: 13 }}>{f.title}</span>
+                        <span className="src">
+                          {f.published ? `received at ${f.station}` : 'still in flight at ingress'}
+                        </span>
+                      </div>
+                      <div className="src">
+                        {f.items.length} products &middot; {formatBytes(f.bytes)} &middot; sent T+
+                        {Math.floor(f.sentEvaSec / 60)} min &middot; light time {formatDelay(f.owltSec)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="src" style={{ marginTop: 7 }}>
+                  Anything still in flight when the hatch closed still arrives. Nothing you
+                  downlinked can be lost by anything that happens to you afterwards &mdash; which
+                  is the entire argument for sending data home as you go rather than at the end.
+                </div>
+              </Panel>
+            )}
+
             {/* Lessons */}
             <Panel title="What this run showed" style={{ gridColumn: '1 / -1' }}>
               <ul style={{ fontSize: 13.5 }}>
                 {o.lessons.map((l, i) => <li key={i}>{l}</li>)}
               </ul>
+            </Panel>
+
+            {/* The field guide: the part meant to outlast the game */}
+            <Panel
+              title="Your Mars field guide"
+              style={{ gridColumn: '1 / -1' }}
+              right={<Chip tone="info">{learned.length} of {Object.keys(LESSONS).length} earned</Chip>}
+            >
+              {learned.length === 0 ? (
+                <div className="src">
+                  No procedures were carried out this run, so there is nothing here. The guide
+                  only fills up from work actually done in the field.
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
+                    {learned.map((l, i) => (
+                      <div
+                        key={l.id}
+                        style={{
+                          border: '1px solid rgba(255,178,74,0.35)',
+                          borderLeft: '3px solid var(--amber)',
+                          background: 'rgba(255,178,74,0.045)',
+                          padding: '9px 11px',
+                        }}
+                      >
+                        <div className="row between gap8">
+                          <span className="mono am" style={{ fontSize: 10, letterSpacing: '0.14em' }}>
+                            {String(i + 1).padStart(2, '0')}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 14, marginTop: 2 }}>{l.headline}</div>
+                        <p style={{ fontSize: 12.5, marginTop: 4, lineHeight: 1.55 }}>{l.body}</p>
+                        <div className="src" style={{ marginTop: 3 }}>Source: {l.source}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="src" style={{ marginTop: 9, lineHeight: 1.6 }}>
+                    This is the part meant to outlast the game. If you remember nothing else:
+                    the reserve is what keeps a surprise from becoming a fatality, dust is the
+                    thing that actually breaks equipment and lungs, and Earth cannot help you
+                    with the next ten minutes.
+                  </div>
+                </>
+              )}
             </Panel>
 
             {/* Full log */}
