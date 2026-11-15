@@ -39,10 +39,11 @@
 
 /* The title telemetry can exceed the available height on phones and in
    landscape. Let this screen scroll instead of clipping the start controls. */
-.title-screen-content {
+.screen.title-screen-content {
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 @media (max-width: 760px), (max-height: 700px) {
