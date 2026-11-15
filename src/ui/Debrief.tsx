@@ -68,6 +68,7 @@ export default function Debrief() {
                   ['Furthest from lander', `${s.maxRangeReachedM.toFixed(0)} m`],
                   ['Worst margin seen', `${isFinite(s.worstMarginMin) ? s.worstMarginMin.toFixed(0) : '—'} min`],
                   ['Reserve breached', s.reserveBreached ? 'YES — flight rule violation' : 'no'],
+                  ['Radiation dose (EVA)', `${s.doseMSv.toFixed(3)} mSv${s.sepEvent ? ' · solar particle event' : ' · cosmic-ray background'}`],
                 ]} />
               </div>
             </Panel>

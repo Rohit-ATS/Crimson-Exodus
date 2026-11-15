@@ -73,6 +73,7 @@ export default function DataPanel({ onClose }: { onClose: () => void }) {
         <li>Temperature, pressure, wind and dust opacity: a parameterised climatology whose ranges are anchored to MEDA observations at Jezero. Not a forecast and not telemetry playback.</li>
         <li>Dust-storm and dust-devil timing: a deterministic schedule weighted by the real seasonal dust climatology for the current Ls.</li>
         <li>Visibility, from column optical depth via Koschmieder's relation.</li>
+        <li>Solar particle events: whether one happens and when is a game schedule; its total dose is scaled to the largest event Curiosity RAD has measured on the surface (May 2024), compressed into EVA minutes. The cosmic-ray background itself is the RAD measurement.</li>
       </ul>
 
       <h4 className="display" style={{ fontSize: 12, marginTop: 12, color: 'var(--magenta)' }}>What is invented</h4>
@@ -103,6 +104,8 @@ export default function DataPanel({ onClose }: { onClose: () => void }) {
         <li><a href="https://ssd.jpl.nasa.gov/planets/approx_pos.html" target="_blank" rel="noreferrer">JPL approximate planetary positions</a> &mdash; the light-time geometry</li>
         <li><a href="https://www.giss.nasa.gov/tools/mars24/help/algorithm.html" target="_blank" rel="noreferrer">NASA GISS Mars24 algorithm</a> &mdash; Mars timekeeping</li>
         <li><a href="https://www.uahirise.org/" target="_blank" rel="noreferrer">HiRISE</a> &mdash; the resolution limit discussed above</li>
+        <li><a href="https://doi.org/10.1126/science.1244797" target="_blank" rel="noreferrer">Hassler et al. 2014, Curiosity RAD</a> &mdash; the surface radiation environment</li>
+        <li><a href="https://www.nasa.gov/missions/maven/nasa-watches-mars-light-up-during-epic-solar-storm/" target="_blank" rel="noreferrer">NASA, May 2024 solar storm at Mars</a> &mdash; the 8.1 mGy RAD surface dose the SEP event is scaled to</li>
       </ul>
     </Modal>
   )

@@ -99,6 +99,18 @@ export const PROVENANCE: Provenance[] = [
     kind: 'in-situ',
   },
   {
+    id: 'rad',
+    label: 'Surface radiation dose',
+    instrument: 'Radiation Assessment Detector (RAD)',
+    source: 'Mars Science Laboratory Curiosity, Gale Crater',
+    date: 'Aug 2012 – Jun 2013 (GCR baseline); 20 May 2024 (largest SEP event)',
+    resolution: 'GCR: 0.210 mGy/day absorbed, 0.64 mSv/day dose equivalent. SEP May 2024: ~8.1 mGy',
+    url: 'https://doi.org/10.1126/science.1244797',
+    caveat:
+      'The cosmic-ray background is the real surface measurement (Hassler et al. 2014), applied at Jezero; Jezero sits ~2 km higher than Gale, so the true rate there is slightly higher. A solar particle event, when one occurs in the game, is scaled to the May 2024 RAD total, but its timing is a game schedule and its hours-long profile is compressed into EVA minutes. Shielding factors for the lander and terrain are reasoned game values, not a transport calculation.',
+    kind: 'in-situ',
+  },
+  {
     id: 'synthetic-dem',
     label: 'Local height field (synthetic)',
     instrument: 'Procedural, this project',
