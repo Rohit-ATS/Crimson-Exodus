@@ -57,7 +57,7 @@ configuration: point it at the repo and it builds. For GitHub Pages, run
 `npm run build` and publish `dist/` — `vite.config.ts` sets `base: './'` so the
 app works from a subpath as well as a domain root.
 
-The only runtime network calls are to `trek.nasa.gov` (basemap tiles),
+The only runtime network calls are to `trek.nasa.gov` (basemap and HiRISE/CTX tiles),
 `flagcdn.com` (flag images) and Google Fonts. All three fail gracefully: the map
 falls back to a clearly labelled schematic, flags fall back to a drawn
 placeholder, and the fonts fall back to system stacks. The simulation itself
@@ -76,6 +76,7 @@ never touches the network.
 | `G` | Plant a flag |
 | `B` | Backpack |
 | `M` | Mission map |
+| `N` | Real-site map (HiRISE imagery + DTM, CRISM, Perseverance traverse) |
 | `T` | Earth comms feed |
 | `H` | Hazard overlay |
 | `V` | First / third person |
@@ -125,6 +126,23 @@ Every number in the app carries one of four labels, and the Data Details panel
 (`K`) spells out the provenance of each.
 
 ### NASA observation
+* **Real-site map at traverse scale** — the answer to "where do I put my feet".
+  * **Elevation:** a 3.65 × 2.49 km window of the USGS Mars 2020 Terrain Relative
+    Navigation **HiRISE DTM** (1 m/post, the model Perseverance landed with;
+    Fergason et al. 2020, [doi:10.5066/P9REJ9JN](https://doi.org/10.5066/P9REJ9JN)),
+    averaged to 4 m and bundled in `public/data/`. Drives the hillshade, elevation
+    and slope layers and the route length, climb, steepest slope and profile.
+  * **Imagery:** the HiRISE 25 cm and CTX 6 m Jezero orthomosaics, live from NASA Mars Trek.
+  * **Spectral:** CRISM observation FRT00005C5E, carbonate browse product, placed
+    with the map projection from its PDS label.
+  * **Rover:** Perseverance's localized traverse (sols 13–714) and the real
+    landing site, Séítah, Kodiak and Hogwallow Flats positions.
+* **Perseverance photographs** of the real outcrops each station is modelled on
+  (PIA24802, PIA24814, PIA25672, PIA26368, PIA24816, PIA25023), shown in the briefing,
+  at each station and on the real-site map, credited on the image.
+* **Surface radiation** from Curiosity's RAD: the galactic cosmic-ray background
+  (0.21 mGy/day, 0.64 mSv/day; [Hassler et al. 2014](https://doi.org/10.1126/science.1244797)),
+  and the May 2024 solar particle event total (8.1 mGy) that the in-game event is scaled to.
 * **Orbital basemaps**, fetched live from [NASA Mars Trek](https://trek.nasa.gov/mars/)
   as standard WMTS tiles: Viking MDIM 2.1 colour mosaic (232 m/px), MOLA colour
   shaded relief (463 m/px), and the MOLA/HRSC blend (200 m/px).
@@ -149,7 +167,8 @@ Every number in the app carries one of four labels, and the Data Details panel
   telemetry playback.
 
 ### Synthetic terrain
-The metre-scale ground you walk on is **procedural**. It is shaped to the
+The metre-scale ground you walk on in 3D is **procedural** (the real ground is in the
+real-site map, `N`). It is shaped to the
 published large-scale morphology of the delta front — floor elevation near
 −2600 m, a scarp of several tens of metres trending roughly N–S, an incised
 breach valley, an isolated remnant butte, a megarippled trough on the floor — but
@@ -166,11 +185,12 @@ are tuned for play.
 ### The honest headline
 
 > This is a prototype and an educational planning interface. **It is not an
-> operationally safe route planner for real astronauts.** The best global orbital
-> basemap it can fetch is about 326 m per pixel — the entire 2.4 km traverse is a
-> few pixels across on it, and the app draws that footprint at true scale so you
-> can see it. Nothing at orbital resolution can certify that a human can safely
-> place a boot on a given square metre of Mars.
+> operationally safe route planner for real astronauts.** The best *global*
+> basemap is about 326 m per pixel — the whole traverse is a few pixels across on
+> it, and the app draws that footprint at true scale. So the app goes further: the
+> real-site map uses the 1 m HiRISE elevation model and 25 cm imagery that
+> Perseverance itself landed with. Even that is not a certification that a human
+> can safely place a boot on a given square metre of Mars.
 
 ---
 
@@ -191,6 +211,14 @@ relation from column optical depth), takes your solar input (Beer–Lambert thro
 a slant path), drives the suit heater load up, and coats the radiator in abrasive
 dust so the sublimator burns feedwater faster. Your margin disappears while you
 are deciding.
+
+**Radiation.** The HUD shows the live dose rate and the EVA dose. The background is
+the RAD measurement. A solar particle event (guaranteed in the demo run) arrives as
+a flare alert from the lander's particle monitor, then protons 18–32 minutes later.
+The suit stops almost none of them; the lander cabin stops most. In testing, staying
+out through the whole event costs about 9.8 mSv; getting inside cuts it to about
+1.3 mSv. Earth's warning arrives a light-time late, so the local alert is the one to
+act on.
 
 **Shelter and abort.** The hazard model combines slope, roughness, exposure to the
 dust-front bearing and range from the lander. When a front arrives it recommends
@@ -221,6 +249,7 @@ src/
     consumables.ts   Portable life support: O2, CO2 scrubber, battery, feedwater
     comms.ts         The Earth link and its delay
     hazard.ts        Planning cues and shelter recommendation
+    radiation.ts     RAD-anchored GCR background and solar particle events
   mission/
     terrain.ts       The one authoritative height field (craters, scarp, breach, dunes)
     site.ts          Jezero: stations, routes, shelters, provenance
@@ -230,7 +259,10 @@ src/
   ui/                Title, briefing, planner, HUD, panels, debrief
     map/             Local raster layers, NASA Trek tiles, elevation profile
   state/             Zustand store, fixed-step sim loop, input
-  data/              ISO 3166-1 flags, flag textures
+  data/              ISO 3166-1 flags, flag textures, realSite.ts (HiRISE DTM loader,
+                     Trek tiles, CRISM projection, Perseverance traverse and images)
+public/data/         Bundled HiRISE DTM window, CRISM browse, Perseverance waypoints
+public/nasa/         Bundled Perseverance and CRISM photojournal images
 ```
 
 One height field serves the 3D mesh, the map, the elevation profile, the cost
@@ -242,14 +274,27 @@ geometry and shaders generated at runtime.
 
 ---
 
+## Team Ataman
+
+NASA Space Apps Challenge 2026 — *Interplanetary Survival Guide: Martian Map*.
+
+| Name | Space Apps handle |
+|---|---|
+| Rohit Rama Linga Reddy Maruri (team owner) | `rohitmaruriats` |
+| Aamod Paudel | `modulus12` |
+| Damir Mertl | `k1lst1x` |
+| Zafar Azatov | `zafarking` |
+
+---
+
 ## AI use disclosure
 
 This project was built with AI assistance (Anthropic Claude) for code authoring,
 simulation design and copy.
 
 **No AI-generated images, video or audio appear anywhere in the app.** Every
-visual is either (a) live NASA Mars Trek tile imagery, credited on the image
-itself, or (b) generated procedurally at runtime by the code in this repository.
+visual is either (a) NASA imagery — live Mars Trek tiles, the CRISM browse map and
+Perseverance photographs — credited on the image itself, or (b) generated procedurally at runtime by the code in this repository.
 National flag images are fetched from flagcdn.com (public-domain renderings keyed
 to ISO 3166-1), and are not NASA data. There is therefore no AI-generated imagery
 requiring a watermark.
