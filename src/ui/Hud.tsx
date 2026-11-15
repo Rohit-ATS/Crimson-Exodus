@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { Chip, Meter } from './components/kit'
+import { missionStatus } from '../mission/objectives'
 import { useStore } from '../state/store'
 import { JACK_SUIT, CONSUMABLE_LABEL } from '../sim/consumables'
 import { formatHours, seasonName } from '../sim/orbits'
@@ -353,6 +354,7 @@ export default function Hud() {
           display: 'flex', flexDirection: 'column', alignItems: 'stretch',
         }}
       >
+        <ObjectiveStrip />
         {/* Rolling log, in the same column so nothing overlaps */}
         <div className="stack gap4" style={{ marginBottom: 8, pointerEvents: 'none' }}>
           {recentLog.map((l, i) => (
@@ -604,5 +606,58 @@ function MiniMap() {
       flag={flag}
       cachesUsed={cachesUsed}
     />
+  )
+}
+
+
+/**
+ * The always-on objective tracker.
+ *
+ * A player should never have to wonder what the game wants from them. This
+ * sits above the log and says, in one line each: whether mission success is
+ * banked yet, how many objectives are left, and the single next action that
+ * moves the mission forward. The full breakdown is one key away.
+ */
+function ObjectiveStrip() {
+  const s = useStore()
+  const m = missionStatus(s)
+  const next = m.nextUp
+  const critical = m.critical[0]
+  const breached = !!critical?.blocked
+
+  return (
+    <div
+      className="clipped"
+      style={{
+        background: 'rgba(5,8,13,0.86)',
+        border: `1px solid ${breached ? 'rgba(255,77,77,0.6)' : m.successPossible ? 'rgba(125,255,178,0.36)' : 'rgba(255,178,74,0.4)'}`,
+        borderLeft: `3px solid ${breached ? 'var(--red)' : m.successPossible ? 'var(--lime)' : 'var(--amber)'}`,
+        padding: '6px 11px',
+        marginBottom: 8,
+        textAlign: 'left',
+        pointerEvents: 'auto',
+      }}
+    >
+      <div className="row between gap8 wrap" style={{ alignItems: 'baseline' }}>
+        <span className="display" style={{ fontSize: 10.5, color: breached ? 'var(--red)' : m.successPossible ? 'var(--lime)' : 'var(--amber)' }}>
+          {breached ? 'RESERVE BREACHED' : m.successPossible ? 'MISSION SUCCESS BANKED' : 'NO PRIMARY OBJECTIVE YET'}
+        </span>
+        <span className="row gap8" style={{ alignItems: 'center' }}>
+          <span className="mono dim" style={{ fontSize: 10 }}>
+            {m.primaryDone}/{m.primaryTotal} primary &middot; {m.bonusDone}/{m.bonusTotal} bonus
+          </span>
+          <button className="btn ghost" style={{ padding: '2px 7px', fontSize: 9 }} onClick={() => s.setUi('objectives')}>
+            OBJECTIVES [O]
+          </button>
+        </span>
+      </div>
+      {next && (
+        <div style={{ fontSize: 12.5, marginTop: 2, lineHeight: 1.4 }}>
+          <span className="mono cy" style={{ fontSize: 9.5, letterSpacing: '0.14em', marginRight: 7 }}>NEXT</span>
+          <span style={{ color: 'var(--text)' }}>{next.title}</span>
+          <span className="faint"> &mdash; {next.next}</span>
+        </div>
+      )}
+    </div>
   )
 }

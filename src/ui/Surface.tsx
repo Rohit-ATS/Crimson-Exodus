@@ -10,6 +10,7 @@ import MapPanel from './panels/MapPanel'
 import RealSitePanel from './panels/RealSitePanel'
 import ProcedureOverlay from './ProcedureOverlay'
 import UplinkOverlay from './UplinkOverlay'
+import ObjectivesPanel from './panels/ObjectivesPanel'
 import { useStore } from '../state/store'
 import { useSimLoop } from '../state/useSimLoop'
 import { installInput, onPress } from '../state/input'
@@ -49,6 +50,7 @@ export default function Surface() {
         case 'KeyG':
           if (s.flagsRemaining > 0) s.setUi('flag')
           break
+        case 'KeyO': s.setUi('objectives'); break
         case 'KeyB': s.setUi('backpack'); break
         case 'KeyM': s.setUi('map'); break
         case 'KeyT': s.setUi('comms'); break
@@ -131,6 +133,7 @@ export default function Surface() {
       {ui === 'map' && <MapPanel />}
       {ui === 'realsite' && <RealSitePanel onClose={() => useStore.getState().setUi(null)} />}
       {ui === 'data' && <DataPanel onClose={() => useStore.getState().setUi(null)} />}
+      {ui === 'objectives' && <ObjectivesPanel />}
       <ProcedureOverlay />
       <UplinkOverlay />
     </div>
