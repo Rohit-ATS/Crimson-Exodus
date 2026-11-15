@@ -13,11 +13,14 @@ import { formatBytes } from '../sim/downlink'
 import { LESSONS } from '../mission/activity'
 import { missionStatus } from '../mission/objectives'
 import { useSettings } from '../state/settings'
+import { downloadReport, reportText, type ReportInput } from './missionReport'
 
 export default function Debrief() {
   const s = useStore()
   const restart = useStore((x) => x.restart)
   const [showData, setShowData] = useState(false)
+  const [reportState, setReportState] = useState<'idle' | 'working' | 'done' | 'failed'>('idle')
+  const [copied, setCopied] = useState(false)
   const o = s.outcome
   const sci = useMemo(() => scienceScore(s), [s])
   const route = ROUTES.find((r) => r.id === s.routeId)!
@@ -33,6 +36,19 @@ export default function Debrief() {
   )
 
   if (!o) return null
+
+  /**
+   * Everything the shareable card needs, assembled at the moment it is asked
+   * for rather than held in state: this is a dead end for the data, not an
+   * input to anything.
+   */
+  const buildReport = (): ReportInput => ({
+    outcome: o,
+    state: s,
+    lessons: learned,
+    scienceScore: { score: sci.score, max: sci.max },
+    routeName: `${route.codename} \u2014 ${route.name}`,
+  })
 
   const tone = o.code === 'returned-nominal' ? 'var(--lime)'
     : o.code === 'returned-reserve-breach' ? 'var(--amber)' : 'var(--red)'
@@ -339,6 +355,39 @@ export default function Debrief() {
       <div className="row between gap12 wrap" style={{ padding: '13px 22px', borderTop: '1px solid var(--line-soft)', position: 'relative' }}>
         <span className="mono" style={{ fontSize: 13, color: tone }}>{o.verdict}</span>
         <div className="row gap8 wrap">
+          <button
+            className="btn"
+            disabled={reportState === 'working'}
+            title="Renders this run as a single portrait image, locally. Nothing is uploaded."
+            onClick={async () => {
+              setReportState('working')
+              try {
+                await downloadReport(buildReport())
+                setReportState('done')
+              } catch {
+                setReportState('failed')
+              }
+            }}
+          >
+            {reportState === 'working' ? 'Rendering\u2026'
+              : reportState === 'done' ? 'Saved \u2713'
+              : reportState === 'failed' ? 'Could not save'
+              : 'Save mission card'}
+          </button>
+          <button
+            className="btn ghost"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(reportText(buildReport()))
+                setCopied(true)
+                setTimeout(() => setCopied(false), 2600)
+              } catch {
+                setCopied(false)
+              }
+            }}
+          >
+            {copied ? 'Copied \u2713' : 'Copy summary'}
+          </button>
           <button className="btn ghost" onClick={() => setShowData(true)}>Data details &amp; disclosure</button>
           <button className="btn" onClick={() => useStore.setState({ phase: 'planning', outcome: null, paused: false })}>
             Re-plan the traverse
