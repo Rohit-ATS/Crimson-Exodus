@@ -35,7 +35,7 @@ export default function Surface() {
       switch (code) {
         case 'Enter':
         case 'NumpadEnter':
-          if (s.atLander) s.ingress()
+          if (s.atLander) s.beginIngress()
           break
         case 'KeyR':
           if (s.nearCache) s.beginCache()

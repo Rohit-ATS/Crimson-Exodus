@@ -6,6 +6,7 @@ import { linkGeometry, marsClock, formatHours, seasonName } from '../sim/orbits'
 import { SITE } from '../mission/site'
 import { formatDelay } from '../sim/comms'
 import { GALLERY } from '../data/nasaGallery'
+import SurvivalGuide from './panels/SurvivalGuide'
 
 /** Four frames that say, without a word, what this is built on. */
 const PROOF = ['abrasionPatches', 'watsonDourbes', 'coreInDrill', 'deltaPano'] as const
@@ -14,6 +15,7 @@ import { openDataPanel } from './dataPanelBus'
 export default function TitleScreen() {
   const startBriefing = useStore((s) => s.startBriefing)
   const quickDemo = useStore((s) => s.quickDemo)
+  const [showGuide, setShowGuide] = useState(false)
   const [, bump] = useState(0)
   const [showControls, setShowControls] = useState(false)
 
@@ -185,6 +187,9 @@ export default function TitleScreen() {
             >
               Two-minute demo &#8594;
             </button>
+            <button className="btn ghost" style={{ padding: '15px 22px' }} onClick={() => setShowGuide(true)}>
+              Mars survival guide
+            </button>
             <button className="btn ghost" style={{ padding: '15px 22px' }} onClick={() => setShowControls((v) => !v)}>
               {showControls ? 'Hide controls' : 'Controls & mission rules [?]'}
             </button>
@@ -194,6 +199,7 @@ export default function TitleScreen() {
             className="src"
             style={{ marginTop: 9, maxWidth: 640, lineHeight: 1.55, color: 'var(--muted)' }}
           >
+            The survival guide is the whole educational payload, readable without playing.
             A full run is a briefing, a route plan and an EVA &mdash; about eight minutes.
             The two-minute demo skips straight to the surface with auto-traverse walking and a
             regional dust front already scheduled; press P at any time to take the controls.
@@ -286,6 +292,8 @@ export default function TitleScreen() {
           </Panel>
         </div>
       </div>
+
+      {showGuide && <SurvivalGuide onClose={() => setShowGuide(false)} />}
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 
 export function Panel({
@@ -83,6 +84,20 @@ export function KV({ rows }: { rows: Array<[string, ReactNode]> }) {
 export function Modal({
   title, onClose, children, width = 820, footer,
 }: { title: string; onClose: () => void; children: ReactNode; width?: number; footer?: ReactNode }) {
+  // Every modal says "Close [Esc]" on its header button, so every modal has to
+  // honour Escape. The surface phase routes Escape through the game's own input
+  // layer, but the title and debrief screens do not, and a dialog that lies
+  // about its own keyboard shortcut is worse than one with no shortcut at all.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   return (
     <div
       className="screen center"

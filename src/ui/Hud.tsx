@@ -400,7 +400,7 @@ export default function Hud() {
               carrying.
             </div>
             <div className="row gap6 center wrap">
-              <button className="btn sm primary" onClick={s.ingress}>
+              <button className="btn sm primary" onClick={s.beginIngress}>
                 Ingress &amp; end EVA [Enter]
               </button>
               <span className="src">or walk back out while the margin holds</span>

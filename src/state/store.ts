@@ -39,7 +39,8 @@ import {
 } from '../sim/comms'
 import {
   abradeActivity, activeBeat, cacheActivity, coreActivity, flagActivity,
-  lensActivity, photoActivity, recordActivity, shelterActivity,
+  ingressActivity, lensActivity, photoActivity, recordActivity, shelterActivity,
+  LESSONS,
   type ActivityDef,
 } from '../mission/activity'
 import {
@@ -69,6 +70,7 @@ export type ProcCommit =
   | { type: 'flag'; code: string }
   | { type: 'cache'; cacheId: string }
   | { type: 'shelter' }
+  | { type: 'ingress' }
 
 /**
  * A packet on its way to Earth, and the feed post it becomes when it lands.
@@ -307,6 +309,9 @@ export interface State {
   feed: FeedPost[]
   /** Station whose package should go out as soon as the result card is closed. */
   pendingDownlink: string | null
+  /** True once the ingress procedure has run: the EVA ends on dismissal, not
+   *  mid-procedure, or the result card would be unmounted before it is read. */
+  pendingFinish: boolean
   // --- comms ---
   messages: CommsMessage[]
   sentAdvisories: string[]
@@ -378,6 +383,13 @@ export interface Actions {
   beginFlag: (code: string) => void
   beginCache: () => void
   beginShelter: () => void
+  beginIngress: () => void
+  /**
+   * Add a survival lesson learned from something that happened rather than
+   * something that was done. A dust storm that takes your landmarks teaches
+   * navigation whether or not you ran a procedure.
+   */
+  awardLesson: (id: string) => void
   // --- the link home -------------------------------------------------------
   /** Bundle a packet and start the downlink animation. */
   startUplink: (title: string, subtitle: string, items: UplinkItem[]) => void
@@ -496,6 +508,7 @@ function initialState(seed = Math.floor(Math.random() * 1e9)): State {
     uplink: null,
     feed: [],
     pendingDownlink: null,
+    pendingFinish: false,
     messages: [],
     sentAdvisories: [],
     log: [],
@@ -566,7 +579,7 @@ export const useStore = create<Store>((set, get) => ({
       jackX: 0, jackZ: 26, jackHeading: live.jack.heading,
       stations: freshStations(),
       photos: [], samples: [], flag: null, flagsRemaining: 1, cachesUsed: [], nearCache: null,
-      proc: null, lessons: [], uplink: null, feed: [], pendingDownlink: null,
+      proc: null, lessons: [], uplink: null, feed: [], pendingDownlink: null, pendingFinish: false,
       messages: [], sentAdvisories: [], log: [],
       aborting: false, sheltering: false, outcome: null,
       distanceWalkedM: 0, maxRangeReachedM: 0,
@@ -895,6 +908,19 @@ export const useStore = create<Store>((set, get) => ({
       log: newLog.length ? [...s.log, ...newLog] : s.log,
     })
 
+    // --- lessons learned the hard way -------------------------------------
+    // Some things about Mars are taught by a procedure. Others are taught by
+    // the planet, and those are awarded when the player actually meets them
+    // rather than when they read about them.
+    {
+      const award = get().awardLesson
+      if (radiation.sepPhase) award('radiationShelter')
+      if (rates.heaterW > 70 || env.airTempC < -70) award('coldKills')
+      if (frac.scrubber < 0.6) award('co2Kills')
+      if (weather.visibilityM < 3000) award('noCompass')
+      if (cons.dustFouling > 0.25) award('dustIsTheHazard')
+    }
+
     // --- the running procedure, advanced on real time ---------------------
     // Done last so it sees the sim state this tick produced, and so the
     // commit it may apply is not overwritten by the set above.
@@ -1207,6 +1233,8 @@ export const useStore = create<Store>((set, get) => ({
       case 'flag': get().plantFlag(c.code); break
       case 'cache': get().useCache(); break
       case 'shelter': get().setSheltering(true); break
+      // Ending the EVA here would unmount the overlay before the card is read.
+      case 'ingress': set({ pendingFinish: true }); break
     }
 
     const lid = p.def.lesson.id
@@ -1283,6 +1311,22 @@ export const useStore = create<Store>((set, get) => ({
     const s = get()
     if (s.sheltering || s.proc) return
     get().startProcedure(shelterActivity(s.advice?.shelter.name ?? 'local terrain'), { type: 'shelter' })
+  },
+
+  beginIngress: () => {
+    const s = get()
+    if (s.proc || s.outcome) return
+    if (Math.hypot(s.jackX, s.jackZ) >= LANDER_RADIUS) return
+    get().startProcedure(ingressActivity(s.cons.dustFouling), { type: 'ingress' })
+  },
+
+  awardLesson: (id) => {
+    if (!LESSONS[id]) return
+    const s = get()
+    if (s.lessons.includes(id)) return
+    set({ lessons: [...s.lessons, id] })
+    get().pushLog('science',
+      `FIELD NOTE \u2014 ${LESSONS[id].headline}. ${LESSONS[id].body}`)
   },
 
   // -------------------------------------------------------------------------
@@ -1432,6 +1476,12 @@ export const useStore = create<Store>((set, get) => ({
     live.jack.tool = 'none'
     live.inputLocked = p.returnUi !== null
     set({ proc: null, ui: p.returnUi, timeScale: p.prevTimeScale })
+
+    if (get().pendingFinish) {
+      set({ pendingFinish: false })
+      get().ingress()
+      return
+    }
 
     const pending = get().pendingDownlink
     if (pending) {

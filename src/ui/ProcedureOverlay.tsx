@@ -397,6 +397,69 @@ function PhotoScene({ p }: { p: number }) {
   )
 }
 
+function IngressScene({ p }: { p: number }) {
+  const clean = seg(p, 0, 0.2)
+  const inside = seg(p, 0.2, 0.46)
+  const repress = seg(p, 0.46, 0.7)
+  const helmet = seg(p, 0.7, 0.9)
+  // 7 mbar outside to a habitable cabin. The needle is the whole story.
+  const kPa = 0.7 + ease(repress) * 69.3
+  const ang = -140 + (kPa / 101) * 280
+  return (
+    <>
+      <Defs />
+      <rect x={0} y={0} width={176} height={176} fill="#0a1016" />
+      {/* Hull and hatch */}
+      <rect x={14} y={14} width={148} height={148} fill="#1b2029" stroke="#6d7a89" strokeWidth={1.2} />
+      <circle cx={88} cy={82} r={44} fill="#121820" stroke="#8d9aa9" strokeWidth={1.6} />
+      <circle cx={88} cy={82} r={36} fill="#0c1218" stroke="#49525e" strokeWidth={1} />
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <circle key={i}
+          cx={88 + Math.cos((i / 6) * Math.PI * 2) * 40}
+          cy={82 + Math.sin((i / 6) * Math.PI * 2) * 40}
+          r={2.6} fill={inside > 0.5 ? '#7dffb2' : '#5d6873'} />
+      ))}
+      {/* Dust coming off during the clean-down */}
+      <Fines n={18} p={clean * (1 - inside)} cx={88} cy={120} spread={52} />
+      {/* Jack, moving through the hatch */}
+      <g transform={`translate(88 ${118 - ease(inside) * 30}) scale(${1 - ease(inside) * 0.3})`} opacity={1 - ease(helmet) * 0.25}>
+        <rect x={-7} y={-18} width={14} height={28} rx={5} fill="#e6e9ee" stroke="#9aa7b5" strokeWidth={0.7} />
+        <circle cx={0} cy={-24} r={8} fill={helmet > 0.5 ? '#dfe4ea' : '#e6e9ee'} stroke="#9aa7b5" strokeWidth={0.7} />
+        {helmet < 0.5 && <circle cx={2} cy={-24} r={5} fill="#c9a24a" />}
+        <rect x={-10} y={-30} width={4} height={10} fill="#c8102e" opacity={0.85} />
+      </g>
+      {/* Pressure gauge */}
+      <g transform="translate(38 140)">
+        <circle r={22} fill="#0c1218" stroke="#49525e" strokeWidth={1.2} />
+        {[-140, -70, 0, 70, 140].map((a) => (
+          <line key={a}
+            x1={Math.cos((a - 90) * Math.PI / 180) * 17}
+            y1={Math.sin((a - 90) * Math.PI / 180) * 17}
+            x2={Math.cos((a - 90) * Math.PI / 180) * 21}
+            y2={Math.sin((a - 90) * Math.PI / 180) * 21}
+            stroke="#5d6873" strokeWidth={1} />
+        ))}
+        {/* The Armstrong limit, marked, because it is the point */}
+        <line
+          x1={Math.cos((-140 + (6.3 / 101) * 280 - 90) * Math.PI / 180) * 13}
+          y1={Math.sin((-140 + (6.3 / 101) * 280 - 90) * Math.PI / 180) * 13}
+          x2={Math.cos((-140 + (6.3 / 101) * 280 - 90) * Math.PI / 180) * 21}
+          y2={Math.sin((-140 + (6.3 / 101) * 280 - 90) * Math.PI / 180) * 21}
+          stroke="#ff4d4d" strokeWidth={1.6} />
+        <line x1={0} y1={0}
+          x2={Math.cos((ang - 90) * Math.PI / 180) * 17}
+          y2={Math.sin((ang - 90) * Math.PI / 180) * 17}
+          stroke="#4fe8ff" strokeWidth={1.8} />
+        <circle r={2.2} fill="#4fe8ff" />
+      </g>
+      <text x={38} y={170} fill="#4fe8ff" fontSize={8} fontFamily="monospace" textAnchor="middle">
+        {kPa < 2 ? '0.7 kPa' : `${kPa.toFixed(0)} kPa`}
+      </text>
+      <Label x={116} y={170} text={helmet > 0 ? 'HELMET OFF' : repress > 0 ? 'REPRESSURISING' : inside > 0 ? 'AIRLOCK' : 'CLEAN DOWN'} />
+    </>
+  )
+}
+
 function Label({ x, y, text }: { x: number; y: number; text: string }) {
   return (
     <text x={x} y={y} fill="#7b8794" fontSize={8} fontFamily="monospace" letterSpacing="1.6" textAnchor="middle">
@@ -419,6 +482,7 @@ function Schematic({ kind, p, sharp }: { kind: string; p: number; sharp: boolean
       {kind === 'flag' && <FlagScene p={p} />}
       {kind === 'shelter' && <ShelterScene p={p} />}
       {kind === 'photo' && <PhotoScene p={p} />}
+      {kind === 'ingress' && <IngressScene p={p} />}
     </svg>
   )
 }

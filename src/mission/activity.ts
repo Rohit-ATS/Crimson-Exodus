@@ -46,6 +46,7 @@ export type ActivityKind =
   | 'flag'
   | 'cache'
   | 'shelter'
+  | 'ingress'
 
 /** One step inside a procedure. */
 export interface Beat {
@@ -99,6 +100,57 @@ function realSecFor(minutes: number): number {
 // ---------------------------------------------------------------------------
 
 export const LESSONS: Record<string, Lesson> = {
+  pressureSuit: {
+    id: 'pressureSuit',
+    headline: 'Your blood would boil at Mars pressure, at body temperature',
+    body:
+      'Surface pressure at Jezero is around 6-8 millibars, well under one percent of Earth\u2019s and far below the ' +
+      'Armstrong limit of about 63 millibars \u2014 the pressure at which water boils at 37 \u00b0C. Unprotected, the ' +
+      'water in your eyes, mouth and lungs would vaporise in seconds. This is why there is no such thing as a quick ' +
+      'step outside on Mars, and why the suit is not clothing, it is a spacecraft.',
+    source: 'NASA Mars Fact Sheet; Armstrong limit, ~6.3 kPa at 37 \u00b0C',
+  },
+  co2Kills: {
+    id: 'co2Kills',
+    headline: 'You can suffocate with a full oxygen tank',
+    body:
+      'Oxygen is not the only consumable that matters. The carbon dioxide you exhale has to be chemically removed or ' +
+      'it builds up in the helmet, and CO\u2082 poisoning arrives as confusion and poor judgement before it arrives as ' +
+      'unconsciousness \u2014 which means the first thing you lose is your ability to notice you are losing it. ' +
+      'Watch the scrubber, not just the O\u2082.',
+    source: 'Portable life support architecture; CO\u2082 washout is a standing EVA concern',
+  },
+  coldKills: {
+    id: 'coldKills',
+    headline: 'The battery is the heater, and the heater is survival',
+    body:
+      'Jezero swings from around \u221220 \u00b0C in the warmest part of the afternoon to below \u221280 \u00b0C before dawn. ' +
+      'The thin air carries little heat, so you lose it mostly by radiation, and the only thing stopping that is ' +
+      'electrical heating. A dead battery on Mars does not mean the lights go out. It means you freeze with oxygen ' +
+      'left to breathe, which is why battery is so often the limiting consumable on this EVA.',
+    source: 'Perseverance MEDA air temperatures at Jezero; Curiosity REMS at Gale',
+  },
+  radiationShelter: {
+    id: 'radiationShelter',
+    headline: 'Mass is the only shielding, and the suit has almost none',
+    body:
+      'Mars has no global magnetic field and about one percent of Earth\u2019s atmospheric column, so galactic cosmic ' +
+      'rays reach the ground. Curiosity\u2019s RAD instrument measured roughly 0.2 to 0.3 millisieverts a day on the ' +
+      'surface. A solar particle event can deliver a large fraction of a career limit in hours. A pressure suit stops ' +
+      'almost none of it; regolith, water and a cabin wall stop most. When the particle monitor goes off, the answer ' +
+      'is to get mass between you and the sky.',
+    source: 'Hassler et al. 2014, Science 343, 1244797 (MSL RAD surface dose)',
+  },
+  noCompass: {
+    id: 'noCompass',
+    headline: 'There is no GPS and a compass does not work',
+    body:
+      'Mars lost its global magnetic field billions of years ago, so a magnetic compass points at nothing useful, and ' +
+      'there is no satellite navigation constellation. You navigate by the Sun, by landmarks and by dead reckoning ' +
+      'from your own tracks. In a dust event, when visibility collapses and the Sun becomes a smear, all three of ' +
+      'those go at once \u2014 which is why a storm is a navigation emergency long before it is anything else.',
+    source: 'MGS magnetometer: crustal remanence only, no global dipole',
+  },
   rind: {
     id: 'rind',
     headline: 'The outside of a Mars rock is not the rock',
@@ -557,6 +609,64 @@ export function shelterActivity(where: string): ActivityDef {
     ],
     images: ['dustStormGlobal', 'slipperyTerrain'],
     lesson: LESSONS.shelterNotDie,
+  }
+}
+
+export function ingressActivity(dustFouling: number): ActivityDef {
+  return {
+    kind: 'ingress',
+    title: 'Ingress and repressurise',
+    subtitle: 'Climb the ladder, clean down, and get the suit off',
+    tool: 'none',
+    minutes: 8,
+    realSec: 11,
+    resultTitle: 'Inside. Suit off.',
+    beats: [
+      {
+        at: 0,
+        label: 'Clean down before the hatch',
+        detail:
+          `Brush and blow the worst of it off outside. You are carrying ${(dustFouling * 100).toFixed(0)}% dust fouling, ` +
+          'and every gram that comes through the hatch stays in the habitat for the rest of the mission — in the ' +
+          'filters, in the food, and in your lungs.',
+        meter: 'dust mitigation',
+      },
+      {
+        at: 0.22,
+        label: 'Into the airlock, outer hatch closed',
+        detail:
+          'A suitport or an airlock exists so the habitat atmosphere is never thrown away and the dust never gets ' +
+          'past this volume. The hatch seal is a wear item and dust is what wears it.',
+        meter: 'outer hatch sealed',
+      },
+      {
+        at: 0.46,
+        label: 'Repressurise',
+        detail:
+          'From about 7 millibars outside to a habitable cabin. Outside is far below the Armstrong limit — the ' +
+          'pressure at which water boils at body temperature — so this is not a comfort step, it is the whole ' +
+          'reason the suit existed for the last few hours.',
+        meter: '7 mbar → cabin',
+      },
+      {
+        at: 0.7,
+        label: 'Equalise, then crack the helmet',
+        detail:
+          'Pressure equal on both sides before anything is opened. A suit at a higher pressure than the cabin is a ' +
+          'hatch that will not open, and a cabin at a higher pressure is a hatch that opens very fast indeed.',
+        meter: 'Δp ≈ 0',
+      },
+      {
+        at: 0.88,
+        label: 'Doff the suit and log the consumables',
+        detail:
+          'What came back in the tanks is what tomorrow gets planned against. The number you write down now is the ' +
+          'number that decides how far anyone can walk next sol.',
+        meter: 'consumables logged',
+      },
+    ],
+    images: ['dustDevilSelfie'],
+    lesson: LESSONS.pressureSuit,
   }
 }
 

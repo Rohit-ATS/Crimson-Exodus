@@ -4,6 +4,7 @@ import { Chip, KV, Meter, Panel, Tag } from './components/kit'
 import LocalMap from './map/LocalMap'
 import ElevationProfile from './map/ElevationProfile'
 import DataPanel from './panels/DataPanel'
+import SurvivalGuide from './panels/SurvivalGuide'
 import { scienceScore, useStore } from '../state/store'
 import { JACK_SUIT } from '../sim/consumables'
 import { ROUTES, STATIONS } from '../mission/site'
@@ -21,6 +22,7 @@ export default function Debrief() {
   const [showData, setShowData] = useState(false)
   const [reportState, setReportState] = useState<'idle' | 'working' | 'done' | 'failed'>('idle')
   const [copied, setCopied] = useState(false)
+  const [showGuide, setShowGuide] = useState(false)
   const o = s.outcome
   const sci = useMemo(() => scienceScore(s), [s])
   const route = ROUTES.find((r) => r.id === s.routeId)!
@@ -388,6 +390,7 @@ export default function Debrief() {
           >
             {copied ? 'Copied \u2713' : 'Copy summary'}
           </button>
+          <button className="btn ghost" onClick={() => setShowGuide(true)}>Full survival guide</button>
           <button className="btn ghost" onClick={() => setShowData(true)}>Data details &amp; disclosure</button>
           <button className="btn" onClick={() => useStore.setState({ phase: 'planning', outcome: null, paused: false })}>
             Re-plan the traverse
@@ -397,6 +400,7 @@ export default function Debrief() {
       </div>
 
       {showData && <DataPanel onClose={() => setShowData(false)} />}
+      {showGuide && <SurvivalGuide onClose={() => setShowGuide(false)} />}
     </div>
   )
 }
