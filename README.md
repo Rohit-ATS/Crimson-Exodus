@@ -91,6 +91,26 @@ never touches the network.
 
 ---
 
+## What it looks like
+
+![The real site at boot scale](docs/screenshots/05-real-site-nasa-data.jpg)
+*HiRISE 25 cm orthomosaic with a slope layer from the 1 m DTM, Perseverance's
+own localized traverse dashed over it, and the route measured against real
+elevation. Every number in that panel is measured; the walking time is the only
+model.*
+
+![A procedure result](docs/screenshots/09-procedure-result-nasa-image.jpg)
+*Every procedure ends on the real NASA image of the same operation being done on
+Mars, credited on the image, with one thing worth remembering if you were the
+one standing there.*
+
+The full set is in [`docs/screenshots/`](docs/screenshots/): title, survival
+guide, briefing, planner, real-site map, traverse, objectives, a procedure
+running and finishing, the downlink to Earth, the NASA feed, a dust storm at
+peak, and the debrief.
+
+---
+
 ## Nothing here is a button that flips a checkbox
 
 The first version of this had a station panel with four buttons. You clicked

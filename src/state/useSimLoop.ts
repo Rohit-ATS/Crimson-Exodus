@@ -6,8 +6,8 @@ import { live } from './live'
 /**
  * Fixed-step simulation loop.
  *
- * The physics, the consumables and Jack's motion all advance in fixed 1/30 s
- * steps at 20 Hz regardless of the display refresh rate, so a 144 Hz monitor
+ * The physics, the consumables and Jack's motion all advance in fixed 1/20 s
+ * steps regardless of the display refresh rate, so a 144 Hz monitor
  * and a 60 Hz monitor produce the same mission. Frames are clamped so a
  * backgrounded tab cannot deliver one enormous step and teleport Jack across
  * the crater. The terrain and atmosphere models are intentionally detailed;
