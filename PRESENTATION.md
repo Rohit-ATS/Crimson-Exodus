@@ -37,9 +37,13 @@ Angel, and the Séítah igneous floor.
 *Visual: the briefing screen, mission tab.*
 
 ### 4 — The data
-Live NASA Mars Trek tiles: Viking MDIM 2.1, MOLA colour shaded relief, MOLA/HRSC
-blend. Real ephemerides driving the Mars season, the local solar time, the sun
-angle and the Earth light time. MEDA-anchored atmosphere.
+Five NASA missions (MRO, Mars 2020, Curiosity, Viking, Mars Global Surveyor), layered at the scale of a footpath. The **real-site map**: the
+1 m **HiRISE elevation model** Perseverance landed with (slope, elevation, hillshade,
+route climb and profile), **HiRISE 25 cm** and **CTX** imagery live from Mars Trek,
+a **CRISM** carbonate layer, and **Perseverance's own traverse**. **Mastcam-Z** photos
+of every real outcrop. **Curiosity RAD** surface radiation. Plus Viking and MOLA for
+regional context, real ephemerides for the season, sun and light time, and a
+MEDA-anchored atmosphere.
 
 **And the honest part, which is the strongest part:** the regional panel draws
 the traverse area at true scale on the best global basemap we can fetch. It is a
@@ -48,7 +52,8 @@ elevation. It cannot tell you where to put your feet. So the traverse map beside
 it is labelled SYNTHETIC rather than pretending to be a NASA product, and every
 number in the app carries one of four provenance labels.
 
-*Visual: the planner, with the orange true-scale box called out.*
+*Visual: the real-site map — HiRISE imagery with the slope layer, the science loop
+and its real profile — then the orange true-scale box on the global map.*
 
 ### 5 — The interaction
 Three routes, three real trades: all the science and the most ground; the short
@@ -71,7 +76,11 @@ model recommends a specific shelter, or tells him to abort when the margin is
 already thinner than the walk home. He turns back. The debrief shows the science
 he recovered, the reserve he kept, and what he left behind.
 
-*Visual: storm peak, the shelter recommendation, then the debrief.*
+Then the Sun flares. The lander's particle monitor warns that protons will arrive in
+about 20 minutes; Earth's warning is a light-time behind. The suit stops almost none
+of them; the cabin stops most. Outside for the whole event: ~10 mSv. Inside: ~1 mSv.
+
+*Visual: storm peak, the radiation banner, the abort recommendation, then the debrief.*
 
 ### 7 — Impact and next step
 This is a communication and training prototype, and it is deliberately honest
@@ -99,8 +108,11 @@ Keep it on **one decision**.
    up a narrow valley that fills with dust. Watch the forecast change." *Click
    between routes.* "And this" — *point to the orange box on the NASA panel* —
    "is our whole traverse at true scale on the best global map NASA publishes.
-   Seven pixels. That is why we call our terrain synthetic instead of calling it
-   data."
+   Seven pixels. So we went to the data Perseverance landed with." *Open the
+   real-site map.* "HiRISE: 25 cm imagery, a 1 m elevation model. Slope in red.
+   The dashed line is where Perseverance actually drove. Our science loop is
+   6.5 km on real terrain, and it stops at the foot of Kodiak instead of climbing it."
+   *Click Kodiak to show the Mastcam-Z photo.*
 
 3. **Step out (40 s).** *Demo run.* "Real Mars sol, real season, real sun angle.
    We chose to step out at 09:30 local solar time, because before sunrise the
@@ -110,11 +122,11 @@ Keep it on **one decision**.
    Perseverance's data supports. Getting it right is what makes the sample worth
    its mass." *Record, seal a core.*
 
-5. **The storm (40 s).** "Opacity climbing, visibility down to two kilometres,
+5. **The storm, then the Sun (40 s).** "Opacity climbing, visibility down to two kilometres,
    sunlight at two percent. It is not going to blow him over — the air is one
-   percent of Earth's density. It is going to take his margin. The model says
-   abort, because sheltering spends the consumables he needs to walk home on."
-   *Declare abort.*
+   percent of Earth's density. It is going to take his margin." *If the flare
+   alert is up:* "And now a solar flare: protons in twenty minutes. The suit stops
+   none of them, the lander stops most. The model says abort." *Declare abort.*
 
 6. **Debrief (20 s).** "Two stations, one sealed core, crew home with the reserve
    intact. And every number labelled: NASA observation, model output, synthetic
@@ -142,7 +154,7 @@ Keep it on **one decision**.
 - [x] Images and media are credited on the image itself.
 
 ### Submission — do these before the deadline
-- [ ] Every teammate registered and listed on the team.
+- [x] Every teammate registered and listed on the team (Team Ataman, four members; also in the README).
 - [ ] Project page complete, all links public.
 - [ ] Confirm the 2026 demo format and local deadline on the official project page.
 - [ ] AI use disclosed per the applicable instructions (text is in the README and the in-app `K` panel).

@@ -8,6 +8,7 @@ import { CACHES, STATIONS } from '../mission/site'
 import LocalMap from './map/LocalMap'
 import AudioToggle from './AudioToggle'
 import { GCR_UGY_PER_H } from '../sim/radiation'
+import { useHudScale } from './useHudScale'
 
 const fmtMin = (m: number) => {
   if (!isFinite(m)) return '--'
@@ -18,6 +19,7 @@ const fmtMin = (m: number) => {
 
 export default function Hud() {
   const s = useStore()
+  const hudScale = useHudScale()
   const near = s.nearStation ? STATIONS.find((x) => x.id === s.nearStation)! : null
   const cache = s.nearCache ? CACHES.find((c) => c.id === s.nearCache)! : null
   const undelivered = s.messages.filter((m) => !m.delivered)
@@ -42,7 +44,7 @@ export default function Hud() {
   }
 
   return (
-    <div className="screen" style={{ pointerEvents: 'none', zIndex: 20 }}>
+    <div className="screen" style={{ pointerEvents: 'none', zIndex: 20, ...hudScale }}>
       {/* ================= TOP BAR ================= */}
       <div
         className="row between gap12 wrap"
