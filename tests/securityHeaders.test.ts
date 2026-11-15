@@ -42,3 +42,25 @@ describe('deployment security policy', () => {
     for (const directive of requiredDirectives) assert.ok(netlify.includes(directive), directive)
   })
 })
+
+describe('GitHub Pages workflow', () => {
+  const workflow = readFileSync('.github/workflows/deploy-pages.yml', 'utf8')
+
+  it('validates the project before publishing dist', () => {
+    for (const command of ['npm ci', 'npm test', 'npm run typecheck', 'npm run build']) {
+      assert.ok(workflow.includes(`run: ${command}`), command)
+    }
+    assert.match(workflow, /path: dist/)
+  })
+
+  it('uses the official Pages artifact and deployment flow', () => {
+    for (const action of [
+      'actions/configure-pages@v6',
+      'actions/upload-pages-artifact@v5',
+      'actions/deploy-pages@v5',
+    ]) assert.ok(workflow.includes(action), action)
+    assert.match(workflow, /pages: write/)
+    assert.match(workflow, /id-token: write/)
+    assert.match(workflow, /name: github-pages/)
+  })
+})
