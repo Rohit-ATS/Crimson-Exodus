@@ -156,6 +156,12 @@ export const ADVISORIES: Record<string, AdvisoryTrigger> = {
     body: (c) =>
       `Our last good consumables frame showed ${c.limiting} as your limiting item with ${c.marginMinutes.toFixed(0)} min of margin over the walk home. Flight rule reminder: the reserve is not a resource, it is the thing that makes the reserve a reserve. If you are reading this and the margin is lower than it was, you are already past the decision point.`,
   },
+  solarFlare: {
+    id: 'solarFlare',
+    subject: 'ADVISORY: solar flare, energetic particles expected',
+    body: (c) =>
+      `Our solar observatories saw an eruptive flare on the Mars-facing side. Energetic protons follow the flash by tens of minutes to hours. This warning took ${mmss(c.owltSec)} to reach you, so your lander's particle monitor almost certainly told you first, and that is the warning to act on. Guidance: abort to the lander and stay inside until the rate is back to background. The suit stops almost none of it; the cabin stops most of it.`,
+  },
   conjunction: {
     id: 'conjunction',
     subject: 'ADVISORY: solar conjunction geometry',

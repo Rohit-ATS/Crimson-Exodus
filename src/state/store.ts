@@ -20,6 +20,10 @@ import {
   JACK_SUIT, consume, freshConsumables, fractions, loadRates, returnEstimate,
   type Activity, type Consumables, type Fractions, type LoadRates, type ReturnEstimate,
 } from '../sim/consumables'
+import {
+  RADIATION_CLEAR, radiationAt, scheduleSep,
+  type RadiationState, type ScheduledSep,
+} from '../sim/radiation'
 import { hazardAt, shelterAdvice, type HazardSample, type ShelterAdvice } from '../sim/hazard'
 import {
   CACHES, ROUTES, SITE, STATIONS, type Route, type Station,
@@ -159,6 +163,13 @@ export interface State {
   weatherEvents: ScheduledEvent[]
   weather: WeatherEvent
   stormFromDeg: number
+  /** Scheduled solar particle event for this EVA, or null. */
+  sepEvent: ScheduledSep | null
+  radiation: RadiationState
+  /** Cumulative EVA dose equivalent, mSv. */
+  doseMSv: number
+  /** True if Jack was outside the lander while an SEP event dominated the dose. */
+  sepExposed: boolean
   hazard: HazardSample
   advice: ShelterAdvice | null
   // --- Jack ---
@@ -308,6 +319,10 @@ function initialState(seed = Math.floor(Math.random() * 1e9)): State {
     weatherEvents: [],
     weather: CLEAR,
     stormFromDeg: 225,
+    sepEvent: null,
+    radiation: RADIATION_CLEAR,
+    doseMSv: 0,
+    sepExposed: false,
     hazard: hazardAt(0, 0, CLEAR, 225),
     advice: null,
     jackX: 0,
@@ -403,6 +418,8 @@ export const useStore = create<Store>((set, get) => ({
       weatherEvents: events,
       weather: CLEAR,
       stormFromDeg: first?.fromDeg ?? 225,
+      sepEvent: scheduleSep(s.seed, plannedMin, demo),
+      radiation: RADIATION_CLEAR, doseMSv: 0, sepExposed: false,
       cons,
       frac: fractions(JACK_SUIT, cons),
       jackX: 0, jackZ: 26, jackHeading: live.jack.heading,
@@ -603,6 +620,25 @@ export const useStore = create<Store>((set, get) => ({
       arrivedAt = nearStation
     }
 
+    // --- radiation -----------------------------------------------------------
+    const radiation = radiationAt(s.sepEvent, evaSec / 60, atLander, s.sheltering)
+    const doseMSv = s.doseMSv + (radiation.doseRateUSvH * dtEva) / 3600 / 1000
+    const sepExposed = s.sepExposed || (radiation.sepShare > 0.5 && !atLander)
+    if (radiation.advisesReturn && !atLander && !advice?.isAbort) {
+      // An SEP event outranks any terrain shelter: rock blocks part of the sky,
+      // the cabin wall stops most of the protons.
+      const home = shelterAdvice(j.x, j.z, s.stormFromDeg, ret.walkMinutes, 0, returnSpeed, true)!
+      advice = {
+        ...home,
+        isAbort: true,
+        rationale:
+          (radiation.sepPhase === 'alert'
+            ? `Solar flare seen; protons expected in about ${radiation.minutesToNextPhase.toFixed(0)} min. The walk home is ${ret.walkMinutes.toFixed(0)} min. `
+            : `Solar particle event under way at ${(radiation.doseRateUSvH / 1000).toFixed(2)} mSv/h. `) +
+          'A suit and a rock face stop little of it; the lander cabin stops most of it. Abort to the lander.',
+      }
+    }
+
     // --- comms delivery ----------------------------------------------------
     let messages = s.messages
     if (messages.some((m) => !m.delivered && m.arriveEvaSec <= evaSec)) {
@@ -623,6 +659,12 @@ export const useStore = create<Store>((set, get) => ({
       sentAdvisories.push('marginLow')
       pushMsg.push(advisory(ADVISORIES.marginLow, evaSec, link.owltSec, ctx))
     }
+    if (s.sepEvent && !sentAdvisories.includes('solarFlare') && evaSec / 60 >= s.sepEvent.flareMin + 1) {
+      sentAdvisories.push('solarFlare')
+      // Earth sees the flare directly, so its warning costs one light time
+      // plus think time, not a round trip.
+      pushMsg.push(advisory(ADVISORIES.solarFlare, s.sepEvent.flareMin * 60 - link.owltSec, link.owltSec, ctx, 120))
+    }
     if (!sentAdvisories.includes('conjunction') && link.nearConjunction) {
       sentAdvisories.push('conjunction')
       pushMsg.push(advisory(ADVISORIES.conjunction, 0, link.owltSec, ctx))
@@ -639,6 +681,9 @@ export const useStore = create<Store>((set, get) => ({
     const newLog: LogEntry[] = []
     if (weather.headline !== s.weather.headline && weather.kind !== 'clear') {
       newLog.push({ evaSec, kind: weather.advisesAbort ? 'danger' : 'warning', text: `${weather.headline}. ${weather.detail}` })
+    }
+    if (radiation.headline !== s.radiation.headline && radiation.sepPhase) {
+      newLog.push({ evaSec, kind: radiation.advisesReturn ? 'danger' : 'warning', text: `${radiation.headline}. ${radiation.detail}` })
     }
     if (s.ret.status !== 'critical' && ret.status === 'critical') {
       newLog.push({ evaSec, kind: 'danger', text: `RETURN MARGIN CRITICAL. ${ret.limiting.toUpperCase()} limiting. Walk home is ${ret.walkMinutes.toFixed(0)} min and you have ${ret.enduranceMinutes.toFixed(0)} min of endurance. Move now.` })
@@ -682,6 +727,7 @@ export const useStore = create<Store>((set, get) => ({
     set({
       time: { startedAt: s.time.startedAt, evaSec, now },
       link, clock, env, weather, hazard, advice,
+      radiation, doseMSv, sepExposed,
       cons, frac, rates, ret,
       jackX: j.x, jackZ: j.z, jackHeading: j.heading,
       activity, speedMs: j.speedMs, pathIndex, nearStation, atLander, nearCache,
@@ -750,7 +796,7 @@ export const useStore = create<Store>((set, get) => ({
     // Hand Jack the walk home automatically: the decision was the hard part,
     // and the player should be watching the margin, not steering.
     set({ aborting: true, sheltering: false, autoTraverse: true })
-    if (s.advice?.isAbort || s.weather.advisesAbort || s.ret.status !== 'nominal') {
+    if (s.advice?.isAbort || s.weather.advisesAbort || s.radiation.advisesReturn || s.ret.status !== 'nominal') {
       set({ heededAdvice: s.heededAdvice + 1 })
     }
     get().pushLog('decision',
@@ -1079,6 +1125,13 @@ function buildOutcome(s: State, code?: OutcomeCode): Outcome {
   }
   if (s.ignoredAdvice > 0) {
     lessons.push(`${s.ignoredAdvice} shelter or abort advisory was issued and not acted on. The advisory is generated locally from the hazard model, which is the only kind of advice available on a ${(s.link.owltSec / 60).toFixed(0)}-minute light-time delay.`)
+  }
+  if (s.sepEvent && s.sepExposed) {
+    lessons.push(`Radiation: Jack was outside the lander while a solar particle event dominated the dose, and took ${s.doseMSv.toFixed(2)} mSv this EVA. SEP protons are soft enough that a cabin wall stops most of them, so the warning time between the flare and the protons is the whole defence. Turn for the lander on the flare, not on the dose.`)
+  } else if (s.sepEvent) {
+    lessons.push(`Radiation: a solar particle event occurred and Jack stayed out of the worst of it. EVA dose ${s.doseMSv.toFixed(2)} mSv, against NASA's 600 mSv career limit.`)
+  } else {
+    lessons.push(`Radiation: EVA dose ${s.doseMSv.toFixed(3)} mSv from the galactic cosmic-ray background Curiosity RAD measures on the surface (0.64 mSv per sol). A suit stops almost none of it; that is a mission-length budget, not an EVA hazard.`)
   }
   if (!s.samples.length) {
     lessons.push('No sample returned. Observations are valuable, but sample return is the one thing a human on the surface can do that no orbiter can.')

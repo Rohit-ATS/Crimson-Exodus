@@ -7,6 +7,7 @@ import { formatDelay } from '../sim/comms'
 import { CACHES, STATIONS } from '../mission/site'
 import LocalMap from './map/LocalMap'
 import AudioToggle from './AudioToggle'
+import { GCR_UGY_PER_H } from '../sim/radiation'
 
 const fmtMin = (m: number) => {
   if (!isFinite(m)) return '--'
@@ -130,6 +131,36 @@ export default function Hud() {
           </div>
         )}
 
+        {/* Solar particle event banner */}
+        {s.radiation.sepPhase && (
+          <div
+            className="clipped"
+            style={{
+              ...panelStyle,
+              flex: '1 1 300px',
+              maxWidth: 460,
+              borderColor: s.radiation.advisesReturn ? 'var(--magenta)' : 'var(--amber)',
+              background: 'rgba(30,8,32,0.86)',
+            }}
+          >
+            <div className="row between gap8" style={{ marginBottom: 3 }}>
+              <span className="display" style={{ fontSize: 13, color: 'var(--magenta)' }}>
+                &#9762; {s.radiation.headline}
+              </span>
+              <span className="mono dim" style={{ fontSize: 10 }}>
+                {s.radiation.sepPhase === 'alert' ? 'protons in' : 'next phase in'} {s.radiation.minutesToNextPhase.toFixed(0)} min
+              </span>
+            </div>
+            <div style={{ fontSize: 12.5, lineHeight: 1.45 }}>{s.radiation.detail}</div>
+            <div className="row gap12 wrap" style={{ marginTop: 5 }}>
+              <Readout label="dose rate" v={`${(s.radiation.doseRateUSvH / 1000).toFixed(3)} mSv/h`} />
+              <Readout label="× background" v={`${(s.radiation.doseRateUGyH / GCR_UGY_PER_H).toFixed(0)}×`} />
+              <Readout label="EVA dose" v={`${s.doseMSv.toFixed(2)} mSv`} />
+              <Readout label="shielding" v={s.atLander ? 'lander cabin' : s.sheltering ? 'terrain (partial)' : 'suit only'} />
+            </div>
+          </div>
+        )}
+
         {/* Earth link */}
         <div style={{ ...panelStyle, minWidth: 212 }} className="clipped">
           <div className="row between gap8" style={{ marginBottom: 4 }}>
@@ -217,6 +248,21 @@ export default function Hud() {
         <div className="src" style={{ marginTop: 4, lineHeight: 1.4 }}>
           That last row is why a Mars storm cannot blow you over.
         </div>
+        <hr className="rule" style={{ margin: '5px 0 3px' }} />
+        <div className="row between gap8" style={{ marginBottom: 2 }}>
+          <span className="display cy" style={{ fontSize: 10.5 }}>RADIATION</span>
+          <span className="tag real" style={{ fontSize: 8 }}>CURIOSITY RAD</span>
+        </div>
+        {([
+          ['Dose rate', `${s.radiation.doseRateUSvH.toFixed(s.radiation.doseRateUSvH < 100 ? 1 : 0)} µSv/h`, s.radiation.sepShare > 0.5],
+          ['EVA dose', `${s.doseMSv.toFixed(3)} mSv`, false],
+          ['Source', s.radiation.sepPhase ? 'GCR + solar protons' : 'cosmic-ray background', s.radiation.sepPhase !== null],
+        ] as const).map(([k, v, hot]) => (
+          <div className="row between gap8" key={k}>
+            <span className="label">{k}</span>
+            <span className="mono" style={{ fontSize: 11, color: hot ? 'var(--magenta)' : undefined }}>{v}</span>
+          </div>
+        ))}
       </div>
 
       {/* ================= BOTTOM LEFT: return estimate ================= */}
