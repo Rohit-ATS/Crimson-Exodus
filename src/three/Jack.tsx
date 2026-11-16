@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { live, type LiveJack } from '../state/live'
+import { jackView, live, type LiveJack } from '../state/live'
 import { normalAt } from '../mission/terrain'
 
 /**
@@ -128,8 +128,11 @@ export default function Jack({
     const g = root.current
     if (!g) return
     const j = source
+    // The local astronaut is drawn between simulation steps; a networked one
+    // arrives already smoothed.
+    const v = source === live.jack ? jackView() : source
 
-    g.position.set(j.x, j.y, j.z)
+    g.position.set(v.x, v.y, v.z)
     // Face the direction of travel, smoothly.
     const target = j.heading
     let d = target - g.rotation.y
@@ -139,7 +142,7 @@ export default function Jack({
 
     // Stand on the slope: tilt the whole body to the local surface normal.
     if (clockRef.current >= nextNormalAt.current) {
-      const [nx, ny, nz] = normalAt(j.x, j.z, 2.0)
+      const [nx, ny, nz] = normalAt(v.x, v.z, 2.0)
       surfaceNormal.current.set(nx, ny, nz)
       nextNormalAt.current = clockRef.current + 0.1
     }
@@ -149,8 +152,8 @@ export default function Jack({
       body.current.rotation.z += (-Math.atan(nx) * Math.cos(g.rotation.y) + Math.atan(nz) * Math.sin(g.rotation.y) - body.current.rotation.z) * Math.min(1, dt * 5)
     }
 
-    const m = j.moving
-    const s = j.stride
+    const m = v.moving
+    const s = v.stride
     const working = j.working > 0
     const work = working ? 1 : 0
     const tool = j.tool

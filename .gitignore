@@ -15,3 +15,6 @@ dist-ssr
 
 # Netlify local function runtime
 .netlify
+
+# Local demo-video project (Remotion); kept out of the repository
+video/

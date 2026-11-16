@@ -639,6 +639,8 @@ export const useStore = create<Store>((set, get) => ({
     let activity: Activity = s.sheltering ? 'shelter' : 'idle'
     let moveX = 0, moveZ = 0
     let stepped = 0
+    // Set below while auto-traverse is walking; the render loop turns the camera.
+    live.camYawGoal = null
 
     if (s.sheltering) {
       j.moving = Math.max(0, j.moving - dt * 4)
@@ -659,10 +661,8 @@ export const useStore = create<Store>((set, get) => ({
           if (input.back) iz -= 1
           if (input.left) ix -= 1
           if (input.right) ix += 1
-          // camYaw is the camera's look direction (0 = +z). Increasing it
-          // turns the view to the left.
-          if (input.turnLeft) live.camYaw += dt * 1.6
-          if (input.turnRight) live.camYaw -= dt * 1.6
+          // Q/E camera turning runs every display frame in useSimLoop, not
+          // here, so the view rotates smoothly.
         }
 
         if (s.autoTraverse) {
@@ -681,8 +681,8 @@ export const useStore = create<Store>((set, get) => ({
           const len = Math.hypot(ix, iz) || 1
           ix /= len; iz /= len
           // Let the camera swing round behind Jack so the view follows the walk.
-          const dYaw = Math.atan2(Math.sin(Math.atan2(ix, iz) - live.camYaw), Math.cos(Math.atan2(ix, iz) - live.camYaw))
-          live.camYaw += dYaw * Math.min(1, dt * 1.5)
+          // The swing itself is applied per display frame in useSimLoop.
+          live.camYawGoal = Math.atan2(ix, iz)
         } else if (ix || iz) {
           // Rotate input into world space relative to where the camera looks.
           // Camera forward is (sin θ, cos θ); screen-right is (-cos θ, sin θ).

@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
 import { useStore } from './store'
 import { marsAudio } from '../sim/audio'
-import { live } from './live'
+import { angleDelta, live, snapshotInterp } from './live'
+import { input } from './input'
 import { useMerv } from './merv'
 import { followTarget, stepRover } from '../sim/rover'
 import { STATIONS } from '../mission/site'
@@ -15,6 +16,10 @@ import { STATIONS } from '../mission/site'
  * backgrounded tab cannot deliver one enormous step and teleport Jack across
  * the crater. The terrain and atmosphere models are intentionally detailed;
  * 20 Hz keeps their CPU cost off the renderer's every-frame budget.
+ *
+ * The renderer does not draw the raw 20 Hz positions: it draws between the
+ * last two steps (see `live.interp`), and the camera turns every frame, so
+ * motion stays smooth on any display.
  */
 export function useSimLoop() {
   const phase = useStore((s) => s.phase)
@@ -25,21 +30,27 @@ export function useSimLoop() {
     let last = performance.now()
     let acc = 0
     const STEP = 1 / 20
+    snapshotInterp()
+    live.interp.alpha = 1
+    live.interp.active = true
 
     const frame = (t: number) => {
       raf = requestAnimationFrame(frame)
       const dt = Math.min(0.25, (t - last) / 1000)
       last = t
       acc += dt
+      turnCamera(dt)
       let guard = 0
       const tick = useStore.getState().tick
       while (acc >= STEP && guard < 8) {
+        snapshotInterp()
         tick(STEP)
         driveRover(STEP)
         acc -= STEP
         guard++
       }
       if (acc > STEP * 8) acc = 0
+      live.interp.alpha = Math.min(1, acc / STEP)
 
       // MERV's conversational layer runs on REAL time, not mission time: his
       // advisories are rate-limited so that compressing the clock thirty-fold
@@ -64,8 +75,30 @@ export function useSimLoop() {
       }
     }
     raf = requestAnimationFrame(frame)
-    return () => cancelAnimationFrame(raf)
+    return () => {
+      cancelAnimationFrame(raf)
+      live.interp.active = false
+    }
   }, [phase])
+}
+
+/**
+ * Turn the camera on the display's clock rather than the simulation's.
+ *
+ * Q/E turning and the auto-traverse swing used to run inside the 20 Hz step,
+ * so the whole view rotated in visible jumps. The movement step still reads
+ * `live.camYaw`, so walking stays camera-relative exactly as before.
+ */
+function turnCamera(dt: number): void {
+  const s = useStore.getState()
+  if (s.phase !== 'surface' || s.paused || s.outcome) return
+  if (!live.inputLocked) {
+    if (input.turnLeft) live.camYaw += dt * 1.6
+    if (input.turnRight) live.camYaw -= dt * 1.6
+  }
+  if (live.camYawGoal !== null) {
+    live.camYaw += angleDelta(live.camYaw, live.camYawGoal) * Math.min(1, dt * 1.5)
+  }
 }
 
 /**

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { live } from '../state/live'
+import { live, roverView } from '../state/live'
 import { renderTier } from '../state/settings'
 import {
   CLEARANCE, TRACK, WHEELS, WHEEL_BASE, WHEEL_R, mastTarget, suspension,
@@ -354,8 +354,10 @@ export default function Rover({
     r.y = s0.y
 
     // ---- Place the vehicle ----------------------------------------------
-    g.position.set(r.x, s0.y + WHEEL_R + CLEARANCE, r.z)
-    g.rotation.set(0, r.heading, 0)
+    // Drawn between simulation steps so the drive is smooth at any refresh rate.
+    const rv = roverView()
+    g.position.set(rv.x, s0.y + WHEEL_R + CLEARANCE, rv.z)
+    g.rotation.set(0, rv.heading, 0)
     if (chassis.current) {
       // Pitch and roll are applied to the body only. The wheels stay on the
       // ground, which is the whole point of the suspension.
