@@ -50,7 +50,17 @@ async function deepgramToken(req, res) {
       headers: { Authorization: `Token ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ ttl_seconds: 60 }),
     })
-    if (!response.ok) return json(res, 502, { error: 'token grant refused by Deepgram' })
+    if (!response.ok) {
+      // Keep the upstream body out of the public response, but preserve the
+      // status in Render logs so a bad key or missing permission is diagnosable.
+      console.error('Deepgram token grant rejected', response.status)
+      const hint = response.status === 403
+        ? ' The API key needs at least Member permissions.'
+        : response.status === 401
+          ? ' Check that DEEPGRAM_API_KEY is a valid API key.'
+          : ''
+      return json(res, 502, { error: `Deepgram token grant rejected (${response.status}).${hint}` })
+    }
     const body = await response.json()
     if (!body.access_token) return json(res, 502, { error: 'token grant returned no access_token' })
     return json(res, 200, { access_token: body.access_token, expires_in: body.expires_in ?? 60 })

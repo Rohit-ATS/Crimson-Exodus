@@ -230,14 +230,29 @@ const any = (t: string, ...phrases: string[]) => phrases.some((p) => t.includes(
  * answered with this EVA's numbers, because that is the more useful answer and
  * the general one is one follow-up away.
  */
-type Intent = { id: string; match: (t: string) => boolean; reply: (d: Telemetry) => Reply }
+/**
+ * `reply` receives the normalised question as well as the telemetry.
+ *
+ * Most intents ignore it. The consumables intent does not: "how much oxygen do
+ * I have" and "how much battery do I have" are the same intent and want
+ * different sentences, and an intent that cannot see which one was asked has
+ * to answer both, which is how you get a companion that recites all four
+ * gauges every time you ask about one.
+ */
+type Intent = { id: string; match: (t: string) => boolean; reply: (d: Telemetry, t: string) => Reply }
 
 const INTENTS: Intent[] = [
   {
     id: 'turnback',
     match: (t) => any(t, 'should i turn', 'turn back', 'turn around', 'keep going', 'press on',
       'can i continue', 'should i continue', 'am i ok', 'am i safe', 'is it safe', 'abort',
-      'do i have time', 'enough time', 'should i stay'),
+      'do i have time', 'enough time', 'should i stay',
+      // "How much time do I have left" is a margin question, not a clock
+      // question, and it is one of the two or three things anybody actually
+      // asks out loud. It used to reach the knowledge base and come back with
+      // the length of a sol.
+      'how much time', 'time do i have', 'time left', 'how long can i', 'how much longer',
+      'can i make it', 'can i reach', 'far enough', 'should i go'),
     reply: (d) => {
       // Standing at the hatch there is no walk to be short of, and the return
       // estimate has nothing to work with yet. Answering "no, turn back" there
@@ -265,6 +280,50 @@ const INTENTS: Intent[] = [
         lesson: 'massIsLife',
       }
     },
+  },
+  /**
+   * The player's own consumables — the most-asked question there is.
+   *
+   * This intent did not exist, and its absence was the single worst bug in
+   * MERV. "How much oxygen do I have left" matched no intent, fell through to
+   * the knowledge base, scored highest against the atmospheric-composition
+   * topic and came back as a lecture about Mars air being 0.16 percent oxygen.
+   * A confident, well-sourced answer to a question nobody asked is worse than
+   * a refusal, and it happened for oxygen, battery, water and the scrubber —
+   * which is to say for every gauge on the suit.
+   */
+  {
+    id: 'consumables',
+    // 'your' belongs to the rover, not the suit: "how is your battery" is a
+    // question about MERV and is answered by the roverself intent below.
+    match: (t) => !any(t, 'your') && any(t,
+      'my oxygen', 'my o2', 'my air', 'my battery', 'my power', 'my water', 'my scrubber',
+      'my levels', 'my consumables', 'my suit', 'my supply', 'my supplies',
+      'much oxygen', 'much o2', 'much air', 'much battery', 'much power', 'much water',
+      'much scrubber', 'much charge', 'much left',
+      'oxygen left', 'o2 left', 'air left', 'battery left', 'power left', 'water left',
+      'oxygen do i', 'o2 do i', 'air do i', 'battery do i', 'water do i', 'power do i',
+      'oxygen am i', 'oxygen is left', 'battery is left', 'water is left',
+      'what is limiting', 'limiting me', 'limiting item', 'limiting consumable',
+      'running low', 'running out', 'life support', 'consumable'),
+    reply: consumableReply,
+  },
+  /**
+   * Time of day, sol, and elapsed EVA — read off the mission clock.
+   *
+   * "What time is it on Mars" and "what sol is it" both used to be answered
+   * with the LENGTH of a sol, which is a fine fact and not the question.
+   */
+  {
+    id: 'clocknow',
+    match: (t) => any(t, 'what time is it', 'time is it', 'what sol', 'which sol', 'sol is it',
+      'sol are we', 'local time', 'solar time', 'time of day', 'what is the time',
+      'how long have i been', 'how long have we been', 'how long out', 'how long outside',
+      'been out here', 'elapsed', 'what season'),
+    reply: (d) => ({
+      text: `${m(d.evaMin)} into the EVA. Local true solar time is ${formatHours(d.ltst)} on sol ${d.sol}, ${d.season}, sun ${d.sunElevationDeg.toFixed(0)} degrees above the horizon. A sol runs 24 hours 39 minutes, so my clock and yours drift apart by about forty minutes a day — which is why the mission runs on sols and not on dates. What matters more than the hour is the light: once the sun drops, your power budget and your footing both get worse at the same time.`,
+      tone: 'info',
+    }),
   },
   {
     id: 'status',
@@ -417,6 +476,74 @@ const INTENTS: Intent[] = [
   },
 ]
 
+/**
+ * Topics whose subject is the planet's version of something the suit measures.
+ * Reaching one of these with a question about yourself means the knowledge
+ * base is about to answer the wrong question. See `respond`.
+ */
+const SHADOWED = new Set(['atmosphere', 'oxygen', 'water', 'power', 'co2', 'sol', 'food', 'windpower'])
+
+/** Is the question about the player rather than about Mars? */
+function selfReferential(t: string): boolean {
+  return / (my|mine) /.test(t)
+    || / (do|did|have|am|can|should) i /.test(t)
+    || / i (have|got|need|carry|am carrying) /.test(t)
+}
+
+/** The four gauges, by the words a person uses for them out loud. */
+const CONSUMABLES = [
+  { id: 'o2', label: 'Oxygen', read: (d: Telemetry) => d.o2, keys: ['oxygen', 'o2', 'air'] },
+  { id: 'scrubber', label: 'The CO2 scrubber', read: (d: Telemetry) => d.scrubber, keys: ['scrubber', 'co2', 'carbon dioxide'] },
+  { id: 'battery', label: 'Battery', read: (d: Telemetry) => d.battery, keys: ['battery', 'power', 'charge', 'juice'] },
+  { id: 'water', label: 'Water', read: (d: Telemetry) => d.water, keys: ['water', 'drink', 'drinking', 'thirsty'] },
+] as const
+
+/**
+ * Answer a question about the suit's consumables from the suit.
+ *
+ * The shape of every answer is deliberate: the percentage first, because that
+ * is what was asked, and then immediately the number that actually decides
+ * anything, because a percentage of a tank tells you nothing about whether you
+ * can get home. A player who learns only one thing from MERV should learn that
+ * the gauge to watch is minutes of margin, not any single bar on the HUD.
+ */
+function consumableReply(d: Telemetry, t: string): Reply {
+  const asked = CONSUMABLES.find((c) => any(t, ...c.keys))
+  const limitLabel = d.limitingLabel
+  const tight = marginIsThin(d.marginMin, d.walkHomeMin)
+  const tone: Reply['tone'] = tight ? 'danger' : d.marginMin < d.walkHomeMin ? 'warning' : 'info'
+
+  // The arithmetic that turns four percentages into one decision. Every
+  // branch below ends with it, because it is the answer behind the question.
+  const budget =
+    `At the return workload the suit can supply ${m(d.enduranceMin)}, walk home is ${m(d.walkHomeMin)}, `
+    + `so your margin is ${m(d.marginMin)} — ${m(d.reserveMarginMin)} of that above the mandated reserve.`
+
+  if (asked && asked.id !== d.limiting) {
+    return {
+      text: `${asked.label} is at ${pct(asked.read(d))}. That is not what is going to end this EVA, though — ${limitLabel} is the limiting item at ${pct(limitingFrac(d))}, and the limiting item is the only one worth watching. ${budget} Four gauges exist precisely so that one of them can be comfortable while another one is killing you.`,
+      tone,
+      lesson: 'massIsLife',
+    }
+  }
+
+  if (asked) {
+    return {
+      text: `${asked.label} is at ${pct(asked.read(d))}, and it is the limiting item right now — the first of the four to run out at this workload. ${budget} ${tight ? 'That margin is thin. Start back.' : 'Percent is the wrong unit for this decision; minutes are the right one.'}`,
+      tone,
+      lesson: 'massIsLife',
+    }
+  }
+
+  // "How are my levels", "what is limiting me", "am I running low" — no single
+  // gauge named, so read all four and name the one that matters.
+  return {
+    text: `Oxygen ${pct(d.o2)}, scrubber ${pct(d.scrubber)}, battery ${pct(d.battery)}, water ${pct(d.water)}. ${limitLabel} is limiting at ${pct(limitingFrac(d))}. ${budget} Status reads ${d.retStatus}.${tight ? ' And that margin is thin — turn for home.' : ''}`,
+    tone,
+    lesson: 'massIsLife',
+  }
+}
+
 function limitingFrac(d: Telemetry): number {
   switch (d.limiting) {
     case 'o2': return d.o2
@@ -454,6 +581,10 @@ export function respond(question: string, d: Telemetry): Reply {
   for (const intent of INTENTS) {
     if (!intent.match(t)) continue
     if (preEva && !offSurfaceOk.has(intent.id)) {
+      // For these two the "general answer" from the knowledge base is about
+      // the planet's air and the planet's day, which is not what was asked
+      // about and reads as MERV missing the point. Answer them honestly.
+      if (intent.id === 'consumables' || intent.id === 'clocknow') return preEvaReply(intent.id)
       /**
        * Before step-out, a question that looks situational is usually general.
        * "How much radiation will I take" asked in the planner wants the
@@ -475,10 +606,27 @@ export function respond(question: string, d: Telemetry): Reply {
       }
       return preEvaReply(intent.id)
     }
-    return intent.reply(d)
+    return intent.reply(d, t)
   }
 
   const topic = findTopic(question)
+
+  /**
+   * The encyclopedia is not allowed to answer a question about this suit.
+   *
+   * Several topics describe the planetary version of something the suit also
+   * measures: the air, water, power, the length of a day. A self-referential
+   * question that reaches one of them gets a well-sourced answer to a
+   * different question — "how much water do I have left" came back with the
+   * depth of the polar ice caps. When the question is about the player and the
+   * best topic is one of those, the telemetry answers instead.
+   */
+  if (topic && SHADOWED.has(topic.id) && selfReferential(t)) {
+    return preEva
+      ? preEvaReply('consumables')
+      : consumableReply(d, t)
+  }
+
   if (topic) {
     return { text: topic.answer, source: topic.source, lesson: topic.lesson, tone: 'science' }
   }
@@ -517,6 +665,17 @@ function preEvaReply(intentId: string): Reply {
     case 'whereami':
       return {
         text: `Still in the lander, at Jezero crater — 18.4 north, 77.5 east, on the floor of a 45 kilometre crater that held a lake three and a half billion years ago.${common}`,
+        tone: 'info',
+      }
+    case 'consumables':
+      return {
+        text: `The suit is on lander power and the gauges all read full, so quoting them at you now would be quoting a number that has not been spent yet.${common} What is worth knowing before you step out: there are four of them — oxygen, CO2 scrubber, battery, water — and they do not run down together. One will be your limiting item, it is usually the scrubber or the battery rather than oxygen, and the only figure that decides anything is how many minutes of margin you have left over after the walk home.`,
+        tone: 'info',
+        lesson: 'massIsLife',
+      }
+    case 'clocknow':
+      return {
+        text: `The EVA clock does not start until the hatch opens.${common} You pick the start time in the planner, and it matters more than it looks: it sets how much daylight you have, how much sun your array gets, and how cold it is when you are furthest from home.`,
         tone: 'info',
       }
     default:
