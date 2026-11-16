@@ -44,8 +44,6 @@ const METAL = '#9ba1a9'       // anodised aluminium structure
 const DARK = '#24262a'
 const WHEEL = '#2b2d31'
 const CELL = '#1b2a4a'        // triple-junction solar cells, deep blue-violet
-const NASA_BLUE = '#0b3d91'
-const NASA_RED = '#fc3d21'
 
 /** How often the six wheel contacts are resampled, seconds. */
 const SUSPENSION_HZ = 1 / 22
@@ -256,8 +254,6 @@ export default function Rover({
         color: new THREE.Color(CELL), roughness: 0.34, metalness: 0.45, envMapIntensity: 0.55,
       }),
       lens: new THREE.MeshStandardMaterial({ color: '#0b1016', roughness: 0.05, metalness: 0.9 }),
-      blue: new THREE.MeshStandardMaterial({ color: NASA_BLUE, roughness: 0.55, envMapIntensity: 0.6 }),
-      red: new THREE.MeshStandardMaterial({ color: NASA_RED, roughness: 0.55, envMapIntensity: 0.6 }),
       lamp: new THREE.MeshStandardMaterial({
         color: '#fff6e2', emissive: '#fff0d0', emissiveIntensity: 0.05,
       }),
@@ -523,17 +519,6 @@ export default function Rover({
             </mesh>
           ))}
         </group>
-
-        {/* ---- Insignia -------------------------------------------------- */}
-        <mesh position={[TRACK * 0.9 + 0.008, 0.14, 0.26]} rotation={[0, Math.PI / 2, 0]} material={mats.blue}>
-          <circleGeometry args={[0.072, 18]} />
-        </mesh>
-        <mesh position={[TRACK * 0.9 + 0.01, 0.14, 0.26]} rotation={[0, Math.PI / 2, 0]} material={mats.red}>
-          <boxGeometry args={[0.1, 0.014, 0.004]} />
-        </mesh>
-        <mesh position={[-TRACK * 0.9 - 0.008, 0.14, 0.26]} rotation={[0, -Math.PI / 2, 0]} material={mats.blue}>
-          <circleGeometry args={[0.072, 18]} />
-        </mesh>
 
         {/* ---- Mast ------------------------------------------------------ */}
         <group position={[0.16, 0.3, WHEEL_BASE * 0.7]}>

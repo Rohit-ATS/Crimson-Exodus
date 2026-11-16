@@ -55,8 +55,6 @@ export default function Lander({ dust = 0, lightsOn = true }: { dust?: number; l
         color: tint('#16284f', dust * 0.5), roughness: 0.18, metalness: 0.55,
         emissive: '#081024', emissiveIntensity: 0.25, envMapIntensity: 1.6,
       }),
-      nasaBlue: new THREE.MeshStandardMaterial({ color: '#0b3d91', roughness: 0.55, envMapIntensity: 0.6 }),
-      nasaRed: new THREE.MeshStandardMaterial({ color: '#fc3d21', roughness: 0.55, envMapIntensity: 0.6 }),
       glass: new THREE.MeshStandardMaterial({
         color: '#9fd8ff', roughness: 0.08, metalness: 0.4,
         emissive: '#8fd0ff', emissiveIntensity: lightsOn ? 1.5 : 0.1,
@@ -223,21 +221,6 @@ export default function Lander({ dust = 0, lightsOn = true }: { dust?: number; l
           </group>
         )
       })}
-
-      {/* ---- NASA insignia on the habitat ------------------------------
-          The agency's own blue and red. Markings are how you tell flight
-          hardware from a mock-up at a glance in any photograph. */}
-      <group position={[0, 3.95, 0]}>
-        <mesh position={[0, 0, 1.722]} material={mats.nasaBlue}>
-          <circleGeometry args={[0.36, 28]} />
-        </mesh>
-        <mesh position={[0, 0.02, 1.728]} rotation={[0, 0, 0.42]} material={mats.nasaRed}>
-          <boxGeometry args={[0.62, 0.055, 0.004]} />
-        </mesh>
-        <mesh position={[0, 0, 1.726]} material={mats.blanket}>
-          <ringGeometry args={[0.355, 0.4, 28]} />
-        </mesh>
-      </group>
 
       {/* ---- High-gain dish: the direct-to-Earth link ------------------- */}
       <group position={[1.45, 5.0, -0.6]} ref={dish}>
