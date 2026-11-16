@@ -12,11 +12,26 @@ import { ALL_FLAGS, OST_NOTE, flagUrl, type Country } from '../../data/countries
  * regional-indicator emoji stands in and the row says so, so nothing on screen
  * can be mistaken for a flag it is not.
  */
-export default function FlagPicker() {
+export default function FlagPicker({
+  onPlant,
+  onClose,
+  pos,
+  nearStation,
+}: {
+  onPlant?: (code: string, name: string) => void
+  onClose?: () => void
+  pos?: { x: number; z: number }
+  nearStation?: string | null
+} = {}) {
   const s = useStore()
   const [q, setQ] = useState('')
   const [sel, setSel] = useState<Country | null>(null)
   const [failed, setFailed] = useState<Record<string, boolean>>({})
+
+  const close = () => {
+    if (onClose) onClose()
+    else s.setUi(null)
+  }
 
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -28,20 +43,25 @@ export default function FlagPicker() {
 
   const plant = () => {
     if (!sel) return
-    s.beginFlag(sel.code)
-    s.setUi(null)
+    if (onPlant) {
+      onPlant(sel.code, sel.name)
+      close()
+    } else {
+      s.beginFlag(sel.code)
+      s.setUi(null)
+    }
   }
 
   return (
     <Modal
       title="Commemorative flag emplacement"
-      onClose={() => s.setUi(null)}
+      onClose={close}
       width={960}
       footer={
         <div className="row between gap12 wrap" style={{ width: '100%' }}>
           <span className="src" style={{ maxWidth: 560, lineHeight: 1.5 }}>{OST_NOTE}</span>
           <div className="row gap8">
-            <button className="btn ghost sm" onClick={() => s.setUi(null)}>Cancel</button>
+            <button className="btn ghost sm" onClick={close}>Cancel</button>
             <button className="btn primary" onClick={plant} disabled={!sel}>
               {sel ? `Plant the flag of ${sel.name}` : 'Choose a flag'}
             </button>
@@ -86,10 +106,10 @@ export default function FlagPicker() {
           <div className="panel" style={{ padding: 10 }}>
             <div className="label" style={{ marginBottom: 4 }}>Emplacement</div>
             <div className="mono" style={{ fontSize: 12 }}>
-              {s.jackX.toFixed(0)} E &nbsp; {s.jackZ.toFixed(0)} N &nbsp;(m, local)
+              {(pos?.x ?? s.jackX).toFixed(0)} E &nbsp; {(pos?.z ?? s.jackZ).toFixed(0)} N &nbsp;(m, local)
             </div>
             <div className="src" style={{ marginTop: 3 }}>
-              {s.nearStation ? `at ${s.nearStation.toUpperCase()}` : 'open ground'} &middot; EVA +
+              {(nearStation ?? s.nearStation) ? `at ${(nearStation ?? s.nearStation)!.toUpperCase()}` : 'open ground'} &middot; EVA +
               {(s.time.evaSec / 60).toFixed(0)} min &middot; LTST {s.clock.ltstHours.toFixed(2)} h
             </div>
             <div className="src" style={{ marginTop: 6 }}>

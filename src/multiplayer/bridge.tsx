@@ -37,6 +37,8 @@ export function missionSnapshot(s: State): MissionSnapshot {
       nearStation: s.nearStation, samples: s.samples.length, photos: s.photos.length,
       completedStations, feedPackages: s.feed.length,
     },
+    flag: s.flag ? { code: s.flag.code, name: s.flag.name, x: s.flag.x, z: s.flag.z } : null,
+    flags: useMultiplayer.getState().flags,
     outcome: s.outcome ? { success: s.outcome.success, title: s.outcome.title } : null,
   }
 }
@@ -56,7 +58,10 @@ export default function MultiplayerBridge() {
     }
     publish(useStore.getState(), true)
     return useStore.subscribe((state, previous) => {
-      publish(state, state.phase !== previous.phase || state.outcome !== previous.outcome)
+      if (state.flag && state.flag !== previous.flag) {
+        useMultiplayer.getState().plantFlag(state.flag.code, state.flag.name, state.flag.x, state.flag.z)
+      }
+      publish(state, state.phase !== previous.phase || state.outcome !== previous.outcome || state.flag !== previous.flag)
     })
   }, [role, status])
 
@@ -64,9 +69,17 @@ export default function MultiplayerBridge() {
     if (status !== 'connected' || role !== 'ev') return
     const publish = () => {
       const j = live.jack
+      const r = live.rover
       useMultiplayer.getState().publishPose({
         x: j.x, z: j.z, heading: j.heading, speedMs: j.speedMs,
         moving: j.moving, stride: j.stride, sentAt: Date.now(),
+        rover: {
+          x: r.x,
+          z: r.z,
+          heading: r.heading,
+          speedMs: r.speedMs,
+          moving: r.speedMs > 0.05 ? 1 : 0,
+        },
       })
     }
     publish()

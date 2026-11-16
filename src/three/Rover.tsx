@@ -7,6 +7,7 @@ import { renderTier } from '../state/settings'
 import {
   CLEARANCE, TRACK, WHEELS, WHEEL_BASE, WHEEL_R, mastTarget, suspension,
 } from '../sim/rover'
+import type { RoverPose } from '../multiplayer/protocol'
 
 /**
  * MERV.
@@ -172,7 +173,7 @@ function Side({
 }
 
 export default function Rover({
-  dust = 0, lampsOn = false, stationPos = null, stormFromDeg = 0,
+  dust = 0, lampsOn = false, stationPos = null, stormFromDeg = 0, pose = null,
 }: {
   dust?: number
   lampsOn?: boolean
@@ -180,6 +181,7 @@ export default function Rover({
   stationPos?: [number, number] | null
   /** Bearing a dust front is arriving from, degrees. */
   stormFromDeg?: number
+  pose?: RoverPose | null
 }) {
   const root = useRef<THREE.Group>(null)
   const chassis = useRef<THREE.Group>(null)
@@ -192,6 +194,14 @@ export default function Rover({
   const bogies = useRef<Array<THREE.Group | null>>([null, null])
   const wheelRefs = useRef<Array<THREE.Group | null>>([null, null, null, null, null, null])
   const lamps = useRef<THREE.Group>(null)
+
+  const net = useRef({
+    x: pose?.x ?? 0,
+    z: pose?.z ?? 0,
+    heading: pose?.heading ?? 0,
+    speedMs: pose?.speedMs ?? 0,
+    spin: 0,
+  })
 
   const tier = renderTier.current.tier
   const wheelGeo = useMemo(() => wheelGeometry(tier), [tier])
@@ -276,7 +286,7 @@ export default function Rover({
 
   /** The array dims as it silts up — the same number the power model uses. */
   useFrame(() => {
-    const d = Math.min(0.85, live.rover.arrayDust)
+    const d = pose ? Math.min(0.85, dust * 0.2) : Math.min(0.85, live.rover.arrayDust)
     mats.cells.color.copy(new THREE.Color(CELL).lerp(new THREE.Color('#a9865c'), d))
     mats.cells.roughness = 0.34 + 0.4 * d
     mats.lamp.emissiveIntensity = lampsOn ? 3.4 : 0.05
@@ -321,15 +331,46 @@ export default function Rover({
   useFrame((_, dtRaw) => {
     const dt = Math.min(0.08, dtRaw)
     clock.current += dt
-    const r = live.rover
     const g = root.current
     if (!g) return
+
+    let currentX = 0
+    let currentZ = 0
+    let currentHeading = 0
+    let currentSpin = 0
+    let currentSteer = 0
+    let currentPlume = 0
+
+    if (pose) {
+      const np = net.current
+      np.x += (pose.x - np.x) * Math.min(1, dt * 10)
+      np.z += (pose.z - np.z) * Math.min(1, dt * 10)
+      const dh = ((pose.heading - np.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI
+      np.heading += dh * Math.min(1, dt * 10)
+      np.speedMs = pose.speedMs
+      np.spin += ((pose.speedMs || 0) / WHEEL_R) * dt
+      currentX = np.x
+      currentZ = np.z
+      currentHeading = np.heading
+      currentSpin = np.spin
+      currentSteer = 0
+      currentPlume = (pose.moving || 0) * 0.5
+    } else {
+      const r = live.rover
+      const rv = roverView()
+      currentX = rv.x
+      currentZ = rv.z
+      currentHeading = rv.heading
+      currentSpin = r.spin
+      currentSteer = r.steer
+      currentPlume = r.plume
+    }
 
     // ---- Ground contact -------------------------------------------------
     sinceSample.current += dt
     if (sinceSample.current >= SUSPENSION_HZ) {
       sinceSample.current = 0
-      const s = suspension(r.x, r.z, r.heading)
+      const s = suspension(currentX, currentZ, currentHeading)
       target.current = { ...s }
     }
     const k = Math.min(1, dt * 11)
@@ -346,14 +387,14 @@ export default function Rover({
       s0.contacts[i] += ((t0.contacts[i] ?? 0) - s0.contacts[i]) * k
     }
 
-    // Publish the chassis height so the HUD and the camera can use it.
-    r.y = s0.y
+    if (!pose) {
+      // Publish the chassis height so the HUD and the camera can use it.
+      live.rover.y = s0.y
+    }
 
     // ---- Place the vehicle ----------------------------------------------
-    // Drawn between simulation steps so the drive is smooth at any refresh rate.
-    const rv = roverView()
-    g.position.set(rv.x, s0.y + WHEEL_R + CLEARANCE, rv.z)
-    g.rotation.set(0, rv.heading, 0)
+    g.position.set(currentX, s0.y + WHEEL_R + CLEARANCE, currentZ)
+    g.rotation.set(0, currentHeading, 0)
     if (chassis.current) {
       // Pitch and roll are applied to the body only. The wheels stay on the
       // ground, which is the whole point of the suspension.
@@ -376,30 +417,23 @@ export default function Rover({
       // way, which tightens the arc; the middle pair is fixed.
       const isFront = WHEELS[i][1] > 0.1
       const isRear = WHEELS[i][1] < -0.1
-      w.rotation.y = isFront ? r.steer : isRear ? -r.steer * 0.6 : 0
+      w.rotation.y = isFront ? currentSteer : isRear ? -currentSteer * 0.6 : 0
       const tyre = w.children[0]
-      if (tyre) tyre.rotation.x = r.spin
+      if (tyre) tyre.rotation.x = currentSpin
       /**
        * Residual contact correction.
-       *
-       * The rocker and bogie rotations already carry most of each wheel down
-       * onto its own contact point — that is what they are for. Applying the
-       * full remaining difference here as well would double-count the terrain
-       * and lift wheels clear of the ground on a slope, so only a fraction is
-       * applied, and it is clamped to the real travel of the joint.
        */
       const drop = (s0.contacts[i] ?? s0.y) - s0.y
       w.position.y = -CLEARANCE + Math.max(-0.17, Math.min(0.17, drop * 0.45))
     }
 
     // ---- Mast -----------------------------------------------------------
+    const r = live.rover
     const look = stationPos ? { x: stationPos[0], z: stationPos[1] } : null
-    const want = mastTarget(
+    const want = pose ? { yaw: 0, pitch: 0 } : mastTarget(
       r, r.mastIntent, { x: live.jack.x, z: live.jack.z }, look, stormFromDeg, clock.current,
     )
     if (mastPan.current) {
-      // Shortest-way pan, eased. A mast that spins the long way round to find
-      // Jack looks broken.
       const cur = mastPan.current.rotation.y
       const delta = ((want.yaw - cur + Math.PI * 3) % (Math.PI * 2)) - Math.PI
       mastPan.current.rotation.y = cur + delta * Math.min(1, dt * 2.6)
@@ -420,23 +454,25 @@ export default function Rover({
       const m = statusBar.current.material as THREE.MeshStandardMaterial
       let color = '#4fe8ff'
       let pulse = 1
-      if (r.listening > 0.5) {
-        color = '#7dffb2'
-        // Breathing, so "I am hearing you" is unmistakable.
-        pulse = 1.6 + Math.sin(clock.current * 7) * 0.7
-      } else if (r.thinking > 0.5) {
-        color = '#ffb24a'
-        pulse = 1.4 + Math.sin(clock.current * 14) * 0.9
-      } else if (r.talking > 0.5) {
-        color = '#4fe8ff'
-        // Chopped, like a vocoder. It reads as speech at any distance.
-        pulse = 1.8 + Math.abs(Math.sin(clock.current * 19)) * 1.9
-      } else if (r.mode === 'lowpower') {
-        color = '#ff4d4d'
-        pulse = 0.5 + Math.abs(Math.sin(clock.current * 1.3)) * 0.8
-      } else if (r.mode === 'blocked') {
-        color = '#ffb24a'
-        pulse = 0.9
+      if (!pose) {
+        if (r.listening > 0.5) {
+          color = '#7dffb2'
+          pulse = 1.6 + Math.sin(clock.current * 7) * 0.7
+        } else if (r.thinking > 0.5) {
+          color = '#ffb24a'
+          pulse = 1.4 + Math.sin(clock.current * 14) * 0.9
+        } else if (r.talking > 0.5) {
+          color = '#4fe8ff'
+          pulse = 1.8 + Math.abs(Math.sin(clock.current * 19)) * 1.9
+        } else if (r.mode === 'lowpower') {
+          color = '#ff4d4d'
+          pulse = 0.5 + Math.abs(Math.sin(clock.current * 1.3)) * 0.8
+        } else if (r.mode === 'blocked') {
+          color = '#ffb24a'
+          pulse = 0.9
+        } else {
+          pulse = 0.85 + Math.sin(clock.current * 1.1) * 0.2
+        }
       } else {
         pulse = 0.85 + Math.sin(clock.current * 1.1) * 0.2
       }
@@ -449,7 +485,7 @@ export default function Rover({
 
     // ---- Dust plume -----------------------------------------------------
     if (plume.current && plumeGeo.attributes.position) {
-      const op = r.plume * 0.5 * (0.35 + dust)
+      const op = currentPlume * 0.5 * (0.35 + dust)
       plumeMat.opacity = op
       plume.current.visible = op > 0.01
       if (op > 0.01) {
@@ -458,11 +494,8 @@ export default function Rover({
         const arr = pos.array as Float32Array
         for (let i = 0; i < pos.count; i++) {
           const sd = seeds.getX(i)
-          // Rise and drift back from the wheels, then recycle. In 1% of
-          // Earth's air density dust thrown up hangs for a long time, which is
-          // why the fall-back is slow.
           arr[i * 3 + 1] += dt * (0.18 + sd * 0.3)
-          arr[i * 3 + 2] -= dt * (0.5 + sd * 0.8) * (0.3 + r.plume)
+          arr[i * 3 + 2] -= dt * (0.5 + sd * 0.8) * (0.3 + currentPlume)
           if (arr[i * 3 + 1] > 0.75 || arr[i * 3 + 2] < -3.4) {
             arr[i * 3] = (Math.random() - 0.5) * 1.5
             arr[i * 3 + 1] = 0

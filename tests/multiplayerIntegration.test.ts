@@ -164,22 +164,55 @@ describe('Render multiplayer service', () => {
     ev2.send(JSON.stringify({ type: 'join', protocol: 2, roomCode: hosted.roomCode, role: 'ev2' }))
     await nextMessage(ev2, 'joined')
 
-    const evPose = { x: 12, z: 24, heading: 0.4, speedMs: 0.9, moving: 1, stride: 2, sentAt: 1 }
+    const evPose = {
+      x: 12, z: 24, heading: 0.4, speedMs: 0.9, moving: 1, stride: 2, sentAt: 1,
+      rover: { x: 10, z: 20, heading: 0.4, speedMs: 0.5, moving: 1 },
+    }
     ev.send(JSON.stringify({ type: 'pose', pose: evPose }))
     const seenByEv2 = await nextMessage<{ type: 'pose'; role: string; pose: typeof evPose }>(ev2, 'pose')
     assert.equal(seenByEv2.role, 'ev')
     assert.equal(seenByEv2.pose.x, 12)
+    assert.equal(seenByEv2.pose.rover?.x, 10)
 
-    const ev2Pose = { x: 14, z: 25, heading: -0.2, speedMs: 0.8, moving: 0.7, stride: 3, sentAt: 1 }
+    const ev2Pose = {
+      x: 14, z: 25, heading: -0.2, speedMs: 0.8, moving: 0.7, stride: 3, sentAt: 1,
+      rover: { x: 11, z: 22, heading: -0.2, speedMs: 0.6, moving: 1 },
+    }
     ev2.send(JSON.stringify({ type: 'pose', pose: ev2Pose }))
     const seenByEv1 = await nextMessage<{ type: 'pose'; role: string; pose: typeof ev2Pose }>(ev, 'pose')
     assert.equal(seenByEv1.role, 'ev2')
     assert.equal(seenByEv1.pose.z, 25)
+    assert.equal(seenByEv1.pose.rover?.x, 11)
 
     await new Promise((resolve) => setTimeout(resolve, 90))
     ev2.send(JSON.stringify({ type: 'pose', pose: { ...ev2Pose, x: 1100, z: 1100 } }))
     const rejected = await nextMessage<{ type: 'error'; code: string }>(ev2, 'error')
     assert.equal(rejected.code, 'POSE_SPEED')
+
+    ev2.close()
+    ev.close()
+  })
+
+  it('allows surface players to plant commemorative flags and syncs them', async () => {
+    const ev = await openSocket()
+    ev.send(JSON.stringify({ type: 'create', protocol: 2 }))
+    const hosted = await nextMessage<{ type: 'joined'; roomCode: string }>(ev, 'joined')
+
+    const ev2 = await openSocket()
+    ev2.send(JSON.stringify({ type: 'join', protocol: 2, roomCode: hosted.roomCode, role: 'ev2' }))
+    await nextMessage(ev2, 'joined')
+
+    const flagPromise = nextMessage<{ type: 'flag_plant'; flag: { code: string; name: string; x: number; z: number }; by: string }>(ev, 'flag_plant')
+    const chatPromise = nextMessage<{ type: 'chat'; message: { text: string } }>(ev, 'chat')
+
+    ev2.send(JSON.stringify({ type: 'flag_plant', code: 'un', name: 'United Nations', x: 15.5, z: 32.1 }))
+    const flagForEv = await flagPromise
+    assert.equal(flagForEv.by, 'ev2')
+    assert.equal(flagForEv.flag.code, 'un')
+    assert.equal(flagForEv.flag.name, 'United Nations')
+
+    const chatForEv = await chatPromise
+    assert.ok(chatForEv.message.text.includes('United Nations'))
 
     ev2.close()
     ev.close()

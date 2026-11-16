@@ -21,6 +21,7 @@ interface MultiplayerState {
   history: CrewMessage[]
   commands: OpsCommand[]
   poses: Partial<Record<'ev' | 'ev2', CrewPose>>
+  flags: Array<{ code: string; name: string; x: number; z: number }>
   /** Everyone in the room, including you. */
   roster: RosterEntry[]
   capacity: number
@@ -40,6 +41,7 @@ interface MultiplayerState {
   sendCommand: (kind: OpsCommandKind, note?: string) => void
   acknowledgeCommand: (commandId: string, accepted: boolean) => void
   sendChat: (text: string) => void
+  plantFlag: (code: string, name: string, x: number, z: number) => void
 }
 
 const env = (import.meta as unknown as { env: Record<string, string | undefined> }).env ?? {}
@@ -142,6 +144,7 @@ function connect(nextIntent: ConnectionIntent) {
         peerConnected: message.peerConnected, snapshot: message.snapshot,
         history: message.history, commands: message.commands, error: null,
         poses: message.poses ?? {},
+        flags: message.flags ?? [],
         roster: message.roster ?? [], capacity: message.capacity ?? ROOM_CAPACITY,
         callsign: message.callsign || state.callsign,
         resumableEvRoom: message.role === 'ev' ? message.roomCode : state.resumableEvRoom,
@@ -173,7 +176,19 @@ function connect(nextIntent: ConnectionIntent) {
         useMultiplayer.setState({ peerConnected: message.connected })
       }
     } else if (message.type === 'snapshot') {
-      useMultiplayer.setState({ snapshot: message.snapshot })
+      const snap = message.snapshot
+      const extraFlags = [...state.flags]
+      if (snap.flag && !extraFlags.some((f) => f.code === snap.flag!.code && Math.hypot(f.x - snap.flag!.x, f.z - snap.flag!.z) < 0.5)) {
+        extraFlags.push(snap.flag)
+      }
+      if (Array.isArray(snap.flags)) {
+        for (const sf of snap.flags) {
+          if (!extraFlags.some((f) => f.code === sf.code && Math.hypot(f.x - sf.x, f.z - sf.z) < 0.5)) {
+            extraFlags.push(sf)
+          }
+        }
+      }
+      useMultiplayer.setState({ snapshot: snap, flags: extraFlags })
     } else if (message.type === 'pose') {
       useMultiplayer.setState({ poses: { ...state.poses, [message.role]: message.pose } })
     } else if (message.type === 'command') {
@@ -185,6 +200,11 @@ function connect(nextIntent: ConnectionIntent) {
         : item) })
     } else if (message.type === 'chat') {
       useMultiplayer.setState({ history: [...state.history, message.message].slice(-60) })
+    } else if (message.type === 'flag_plant') {
+      const exists = state.flags.some((f) => f.code === message.flag.code && Math.hypot(f.x - message.flag.x, f.z - message.flag.z) < 0.5)
+      if (!exists) {
+        useMultiplayer.setState({ flags: [...state.flags, message.flag] })
+      }
     } else if (message.type === 'pong') {
       useMultiplayer.setState({ latencyMs: Math.max(0, Date.now() - message.at) })
     } else if (message.type === 'error') {
@@ -222,6 +242,7 @@ export const useMultiplayer = create<MultiplayerState>((set, get) => ({
   history: [],
   commands: [],
   poses: {},
+  flags: [],
   roster: [],
   capacity: ROOM_CAPACITY,
   callsign: typeof window === 'undefined' ? '' : playerIdentity().callsign,
@@ -265,7 +286,7 @@ export const useMultiplayer = create<MultiplayerState>((set, get) => ({
     set({
       status: endpoint ? 'idle' : 'unavailable', roomCode: null, role: null,
       peerConnected: false, latencyMs: null, error: null, snapshot: null,
-      history: [], commands: [], roster: [], poses: {},
+      history: [], commands: [], roster: [], poses: {}, flags: [],
       resumableEvRoom: role === 'ev' ? null : get().resumableEvRoom,
       resumableEv2Room: role === 'ev2' ? null : get().resumableEv2Room,
       resumableHabcomRoom: role === 'habcom' ? null : get().resumableHabcomRoom,
@@ -281,6 +302,7 @@ export const useMultiplayer = create<MultiplayerState>((set, get) => ({
       : item) })
   },
   sendChat: (text) => transmit({ type: 'chat', text: text.slice(0, 240) }),
+  plantFlag: (code, name, x, z) => transmit({ type: 'flag_plant', code, name, x, z }),
 }))
 
 /**

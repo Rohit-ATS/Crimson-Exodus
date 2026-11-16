@@ -220,6 +220,7 @@ wss.on('connection', (ws) => {
         resumeToken: client.token, peerConnected: registry.peerConnected(room, client.role),
         roster: registry.occupants(room, client), capacity: ROOM_CAPACITY,
         snapshot: room.snapshot, history: room.history, commands: room.commands, poses: room.poses,
+        flags: room.flags ?? [],
       })
       broadcast(room, { type: 'peer', role: client.role, connected: true }, client)
       announceRoster(room)
@@ -284,6 +285,23 @@ wss.on('connection', (ws) => {
       const chat = registry.addChat(room, client.role, message.text)
       if (!chat) return fail(ws, 'BAD_CHAT', 'Message is empty.')
       broadcast(room, { type: 'chat', message: chat })
+      return
+    }
+    if (message.type === 'flag_plant') {
+      if (client.role !== 'ev' && client.role !== 'ev2') return fail(ws, 'FORBIDDEN', 'Only surface crew can plant flags.')
+      const code = typeof message.code === 'string' ? message.code.slice(0, 10).toLowerCase() : ''
+      const name = typeof message.name === 'string' ? message.name.slice(0, 50) : code
+      const x = Number.isFinite(message.x) ? Math.max(-1180, Math.min(1180, message.x)) : 0
+      const z = Number.isFinite(message.z) ? Math.max(-1180, Math.min(1180, message.z)) : 0
+      if (!code) return fail(ws, 'BAD_FLAG', 'Flag code is required.')
+      const flag = { code, name, x, z }
+      if (!room.flags) room.flags = []
+      if (!room.flags.some((f) => f.code === flag.code && Math.hypot(f.x - flag.x, f.z - flag.z) < 0.5)) {
+        room.flags.push(flag)
+      }
+      broadcast(room, { type: 'flag_plant', flag, by: client.role })
+      const chat = registry.addChat(room, client.role, `Emplaced commemorative flag: ${name}`)
+      if (chat) broadcast(room, { type: 'chat', message: chat })
       return
     }
     if (message.type === 'leave') ws.close(1000, 'Crew member left')

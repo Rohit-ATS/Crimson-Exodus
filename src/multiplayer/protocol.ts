@@ -25,6 +25,14 @@ export interface RosterEntry {
   you?: boolean
 }
 
+export interface RoverPose {
+  x: number
+  z: number
+  heading: number
+  speedMs: number
+  moving: number
+}
+
 /** A compact, untrusted transform streamed by either surface player. */
 export interface CrewPose {
   x: number
@@ -34,6 +42,7 @@ export interface CrewPose {
   moving: number
   stride: number
   sentAt: number
+  rover?: RoverPose
 }
 
 export interface MissionSnapshot {
@@ -77,6 +86,8 @@ export interface MissionSnapshot {
     completedStations: number
     feedPackages: number
   }
+  flag?: { code: string; name: string; x: number; z: number } | null
+  flags?: Array<{ code: string; name: string; x: number; z: number }>
   outcome: { success: boolean; title: string } | null
 }
 
@@ -112,6 +123,7 @@ export type ClientMessage =
   | { type: 'command'; kind: OpsCommandKind; note: string }
   | { type: 'command_ack'; commandId: string; accepted: boolean }
   | { type: 'chat'; text: string }
+  | { type: 'flag_plant'; code: string; name: string; x: number; z: number }
   | { type: 'ping'; at: number }
   | { type: 'leave' }
 
@@ -133,6 +145,7 @@ export type ServerMessage =
       history: CrewMessage[]
       commands: OpsCommand[]
       poses: Partial<Record<'ev' | 'ev2', CrewPose>>
+      flags?: Array<{ code: string; name: string; x: number; z: number }>
     }
   | { type: 'peer'; role: MultiplayerRole; connected: boolean }
   | { type: 'roster'; roster: RosterEntry[]; capacity: number }
@@ -141,6 +154,7 @@ export type ServerMessage =
   | { type: 'command'; command: OpsCommand }
   | { type: 'command_ack'; commandId: string; accepted: boolean }
   | { type: 'chat'; message: CrewMessage }
+  | { type: 'flag_plant'; flag: { code: string; name: string; x: number; z: number }; by: MultiplayerRole }
   | { type: 'pong'; at: number }
   | { type: 'error'; code: string; message: string; retryable: boolean }
 

@@ -101,13 +101,29 @@ export function validateSnapshot(raw) {
       completedStations: Math.round(finite(science.completedStations, 0, 100)),
       feedPackages: Math.round(finite(science.feedPackages, 0, 1000)),
     },
+    flag: raw.flag && typeof raw.flag === 'object'
+      ? {
+        code: shortText(raw.flag.code, 10),
+        name: shortText(raw.flag.name, 50),
+        x: finite(raw.flag.x, -1180, 1180),
+        z: finite(raw.flag.z, -1180, 1180),
+      }
+      : null,
+    ...(Array.isArray(raw.flags) ? {
+      flags: raw.flags.slice(0, 30).map((f) => ({
+        code: shortText(f.code, 10),
+        name: shortText(f.name, 50),
+        x: finite(f.x, -1180, 1180),
+        z: finite(f.z, -1180, 1180),
+      })).filter((f) => f.code),
+    } : {}),
     outcome,
   }
 }
 
 export function validatePose(raw) {
   if (!raw || typeof raw !== 'object') return null
-  return {
+  const pose = {
     x: finite(raw.x, -1180, 1180),
     z: finite(raw.z, -1180, 1180),
     heading: finite(raw.heading, -Math.PI * 4, Math.PI * 4),
@@ -116,6 +132,16 @@ export function validatePose(raw) {
     stride: finite(raw.stride, -1e6, 1e6),
     sentAt: Date.now(),
   }
+  if (raw.rover && typeof raw.rover === 'object') {
+    pose.rover = {
+      x: finite(raw.rover.x, -1180, 1180),
+      z: finite(raw.rover.z, -1180, 1180),
+      heading: finite(raw.rover.heading, -Math.PI * 4, Math.PI * 4),
+      speedMs: finite(raw.rover.speedMs, 0, 40),
+      moving: finite(raw.rover.moving, 0, 1),
+    }
+  }
+  return pose
 }
 
 /**
@@ -142,7 +168,7 @@ export class RoomRegistry {
     do code = roomCode(); while (this.rooms.has(code))
     const room = {
       code, createdAt: Date.now(), emptyAt: null, snapshot: null,
-      clients: new Map(), tokens: new Map(), history: [], commands: [], poses: {},
+      clients: new Map(), tokens: new Map(), history: [], commands: [], poses: {}, flags: [],
     }
     this.rooms.set(code, room)
     return this.attach(room, 'ev', connection, options)

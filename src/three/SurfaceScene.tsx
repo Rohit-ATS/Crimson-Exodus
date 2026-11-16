@@ -65,6 +65,18 @@ export default function SurfaceScene() {
   const stormFromDeg = useStore((s) => s.stormFromDeg)
   const mastAt = useMemo(() => mastStation(nearStation), [nearStation])
   const ev2Pose = useMultiplayer((state) => state.poses.ev2)
+  const mpFlags = useMultiplayer((state) => state.flags)
+
+  const allFlags = useMemo(() => {
+    const list: Array<{ code: string; x: number; z: number }> = []
+    if (flag) list.push({ code: flag.code, x: flag.x, z: flag.z })
+    for (const f of mpFlags) {
+      if (!list.some((existing) => existing.code === f.code && Math.hypot(existing.x - f.x, existing.z - f.z) < 0.5)) {
+        list.push({ code: f.code, x: f.x, z: f.z })
+      }
+    }
+    return list
+  }, [flag, mpFlags])
 
   const sunDir = useMemo(
     () => sunVector(clock.sunAzimuthDeg, clock.sunElevationDeg),
@@ -162,7 +174,9 @@ export default function SurfaceScene() {
         cachesUsed={cachesUsed}
       />
 
-      {flag && <FlagMesh code={flag.code} x={flag.x} z={flag.z} />}
+      {allFlags.map((f, i) => (
+        <FlagMesh key={`${f.code}-${f.x.toFixed(1)}-${f.z.toFixed(1)}-${i}`} code={f.code} x={f.x} z={f.z} />
+      ))}
 
       <Jack dust={dustFouling} lampsOn={lampsOn} hidden={live.firstPerson} />
       {ev2Pose && <NetworkJack pose={ev2Pose} variant="ev2" dust={dustFouling} />}
@@ -176,6 +190,13 @@ export default function SurfaceScene() {
         stationPos={mastAt}
         stormFromDeg={stormFromDeg}
       />
+      {ev2Pose?.rover && (
+        <Rover
+          pose={ev2Pose.rover}
+          dust={dustFouling}
+          lampsOn={lampsOn}
+        />
+      )}
 
       <DustField
         intensity={Math.max(0.04, Math.min(1, Math.pow(env.dustOpticalDepth / 3.0, 0.8)))}

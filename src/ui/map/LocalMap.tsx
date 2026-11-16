@@ -24,6 +24,7 @@ export interface LocalMapProps {
   visitedStations?: Record<string, boolean>
   cachesUsed?: string[]
   flag?: { x: number; z: number; code: string } | null
+  flags?: Array<{ x: number; z: number; code: string }>
 }
 
 const RES = 420
@@ -31,7 +32,7 @@ const RES = 420
 export default function LocalMap(props: LocalMapProps) {
   const {
     layer, routeId, showAllRoutes, jack, jack2, weather, stormFromDeg,
-    sunAzDeg, sunElDeg, compact, size = 520, onHover, visitedStations, flag, cachesUsed,
+    sunAzDeg, sunElDeg, compact, size = 520, onHover, visitedStations, flag, flags, cachesUsed,
   } = props
 
   const canvas = useRef<HTMLCanvasElement>(null)
@@ -223,8 +224,12 @@ export default function LocalMap(props: LocalMapProps) {
     }
 
     // --- Flag -------------------------------------------------------------
-    if (flag) {
-      const [px, py] = W(flag.x, flag.z)
+    const flagList = [...(flags ?? [])]
+    if (flag && !flagList.some((f) => f.code === flag.code && Math.hypot(f.x - flag.x, f.z - flag.z) < 0.5)) {
+      flagList.push(flag)
+    }
+    for (const f of flagList) {
+      const [px, py] = W(f.x, f.z)
       ctx.strokeStyle = '#ffffff'
       ctx.lineWidth = 1.6
       ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py - 11); ctx.stroke()
@@ -364,7 +369,7 @@ export default function LocalMap(props: LocalMapProps) {
       ctx.beginPath(); ctx.moveTo(hx, 0); ctx.lineTo(hx, size); ctx.stroke()
       ctx.beginPath(); ctx.moveTo(0, hy); ctx.lineTo(size, hy); ctx.stroke()
     }
-  }, [raster, routeId, showAllRoutes, jack, weather, stormFromDeg, compact, size, paths, hover, visitedStations, flag, cachesUsed])
+  }, [raster, routeId, showAllRoutes, jack, weather, stormFromDeg, compact, size, paths, hover, visitedStations, flag, flags, cachesUsed])
 
   return (
     <canvas

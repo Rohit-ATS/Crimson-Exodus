@@ -20,6 +20,9 @@ import MarsEnvironment from '../three/MarsEnvironment'
 import RouteLine from '../three/RouteLine'
 import Markers from '../three/Markers'
 import Rover from '../three/Rover'
+import FlagMesh from '../three/FlagMesh'
+import FlagPicker from '../ui/panels/FlagPicker'
+import { followTarget, stepRover } from '../sim/rover'
 import { DustDevil, DustField } from '../three/Dust'
 import { Chip, Meter, Modal, Tag } from '../ui/components/kit'
 import RoverImageCard from '../ui/panels/RoverImageCard'
@@ -102,7 +105,7 @@ function CoopCamera({ firstPerson }: { firstPerson: boolean }) {
 }
 
 function CoopWorld({
-  ev1, dust, path, progressIndex, nearStation, stationsState, firstPerson,
+  ev1, dust, path, progressIndex, nearStation, stationsState, firstPerson, allFlags,
 }: {
   ev1: CrewPose
   dust: number
@@ -111,6 +114,7 @@ function CoopWorld({
   nearStation: string | null
   stationsState: Record<string, { choice?: string }>
   firstPerson: boolean
+  allFlags: Array<{ code: string; x: number; z: number }>
 }) {
   const sunAzDeg = 210
   const sunElDeg = 38
@@ -155,6 +159,11 @@ function CoopWorld({
       />
 
       <Rover dust={dustFouling} lampsOn={dust > 2.5} stationPos={null} stormFromDeg={0} />
+      {ev1?.rover && <Rover pose={ev1.rover} dust={dustFouling} lampsOn={dust > 2.5} />}
+
+      {allFlags.map((f, i) => (
+        <FlagMesh key={`${f.code}-${f.x.toFixed(1)}-${f.z.toFixed(1)}-${i}`} code={f.code} x={f.x} z={f.z} />
+      ))}
 
       <DustField
         intensity={Math.max(0.04, Math.min(1, Math.pow(dust / 3.0, 0.8)))}
@@ -231,13 +240,31 @@ export default function CoopSurface() {
   const multiplayer = useMultiplayer()
   const snapshot = multiplayer.snapshot
   const [chatInput, setChatInput] = useState('')
-  const [ui, setUi] = useState<null | 'science' | 'map' | 'realsite' | 'backpack' | 'objectives' | 'rover' | 'data' | 'comms'>(null)
+  const [ui, setUi] = useState<null | 'science' | 'map' | 'realsite' | 'backpack' | 'objectives' | 'rover' | 'data' | 'comms' | 'flag'>(null)
   const [selectedStationId, setSelectedStationId] = useState<string>('kodiak')
   const [firstPerson, setFirstPerson] = useState(false)
   const [flash, setFlash] = useState(false)
   const [photos, setPhotos] = useState<CapturedPhoto[]>([])
   const [observations, setObservations] = useState<Record<string, { optionId: string; note: string }>>({})
   const [mapLayer, setMapLayer] = useState<LayerId>('relief')
+
+  const allFlags = useMemo(() => {
+    const list: Array<{ code: string; x: number; z: number }> = []
+    if (snapshot?.flag) list.push(snapshot.flag)
+    if (Array.isArray(snapshot?.flags)) {
+      for (const f of snapshot.flags) {
+        if (!list.some((existing) => existing.code === f.code && Math.hypot(existing.x - f.x, existing.z - f.z) < 0.5)) {
+          list.push(f)
+        }
+      }
+    }
+    for (const f of multiplayer.flags) {
+      if (!list.some((existing) => existing.code === f.code && Math.hypot(existing.x - f.x, existing.z - f.z) < 0.5)) {
+        list.push(f)
+      }
+    }
+    return list
+  }, [snapshot?.flag, snapshot?.flags, multiplayer.flags])
 
   const audioRef = useRef<MarsAudio | null>(null)
   const initialized = useRef(false)
@@ -309,6 +336,12 @@ export default function CoopSurface() {
     live.camYaw = ev1.heading
     live.camPitch = 0.26
     live.camDist = 9
+
+    const rTgt = followTarget(live.jack.x, live.jack.z, live.jack.heading)
+    live.rover.x = rTgt.x
+    live.rover.z = rTgt.z
+    live.rover.heading = live.jack.heading
+    live.rover.speedMs = 0
   }, [ev1, snapshot?.phase])
 
   // Update selected station when approaching
@@ -355,6 +388,22 @@ export default function CoopSurface() {
       }
       j.y = heightAt(j.x, j.z)
 
+      // Drive MERV to follow EV-2
+      const r = live.rover
+      const timeScale = Math.max(1, Math.min(30, snapshot.mission.timeScale || 1))
+      const dtEva = dt * timeScale
+      const t = followTarget(j.x, j.z, j.heading)
+      stepRover(r, {
+        targetX: t.x,
+        targetZ: t.z,
+        jackX: j.x,
+        jackZ: j.z,
+        hold: snapshot.mission.paused || snapshot.mission.sheltering,
+        directIrradianceW: 590,
+        tau: snapshot.environment.dustOpacity || 0.5,
+        windMs: snapshot.environment.visibilityM < 500 ? 18 : 6,
+      }, dtEva)
+
       // Audio loop update
       if (audioRef.current?.isRunning) {
         const inputs: AudioInputs = {
@@ -377,6 +426,13 @@ export default function CoopSurface() {
         multiplayer.publishPose({
           x: j.x, z: j.z, heading: j.heading, speedMs: j.speedMs,
           moving: j.moving, stride: j.stride, sentAt: Date.now(),
+          rover: {
+            x: live.rover.x,
+            z: live.rover.z,
+            heading: live.rover.heading,
+            speedMs: live.rover.speedMs,
+            moving: live.rover.speedMs > 0.05 ? 1 : 0,
+          },
         })
       }
     }
@@ -437,6 +493,7 @@ export default function CoopSurface() {
         case 'KeyN': setUi((cur) => cur === 'realsite' ? null : 'realsite'); break
         case 'KeyB': setUi((cur) => cur === 'backpack' ? null : 'backpack'); break
         case 'KeyO': setUi((cur) => cur === 'objectives' ? null : 'objectives'); break
+        case 'KeyG': setUi((cur) => cur === 'flag' ? null : 'flag'); break
         case 'KeyJ': setUi((cur) => cur === 'rover' ? null : 'rover'); break
         case 'KeyK': setUi((cur) => cur === 'data' ? null : 'data'); break
         case 'KeyT': setUi((cur) => cur === 'comms' ? null : 'comms'); break
@@ -505,6 +562,7 @@ export default function CoopSurface() {
         nearStation={nearStation}
         stationsState={stationsState}
         firstPerson={firstPerson}
+        allFlags={allFlags}
       />
 
       {/* Shutter Flash Animation */}
@@ -652,6 +710,9 @@ export default function CoopSurface() {
         </button>
         <button className={`btn sm ${ui === 'objectives' ? 'on' : 'ghost'}`} onClick={() => setUi('objectives')}>
           [O] Objectives
+        </button>
+        <button className={`btn sm ${ui === 'flag' ? 'on' : 'ghost'}`} onClick={() => setUi('flag')}>
+          [G] Flag
         </button>
         <button className="btn sm primary" onClick={takePhoto}>
           [C] Photo
@@ -835,6 +896,7 @@ export default function CoopSurface() {
                 sunAzDeg={210}
                 sunElDeg={38}
                 size={520}
+                flags={allFlags}
               />
               <div className="stack gap10">
                 <div className="panel" style={{ padding: 12 }}>
@@ -865,6 +927,22 @@ export default function CoopSurface() {
 
       {/* 6. Data / Provenance Modal */}
       {ui === 'data' && <DataPanel onClose={() => setUi(null)} />}
+
+      {/* Flag Emplacement Modal */}
+      {ui === 'flag' && (
+        <FlagPicker
+          onClose={() => setUi(null)}
+          pos={{ x: live.jack.x, z: live.jack.z }}
+          nearStation={activeStation?.name ?? null}
+          onPlant={(code, name) => {
+            const ahead = 1.35
+            const fx = live.jack.x + Math.sin(live.jack.heading) * ahead
+            const fz = live.jack.z + Math.cos(live.jack.heading) * ahead
+            multiplayer.plantFlag(code, name, fx, fz)
+            setUi(null)
+          }}
+        />
+      )}
 
       {/* 7. Backpack & Field Kit Modal */}
       {ui === 'backpack' && (
