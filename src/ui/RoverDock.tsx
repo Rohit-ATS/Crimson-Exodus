@@ -97,11 +97,16 @@ export default function RoverDock() {
       )}
 
       <button
-        className="btn ghost sm"
         onClick={() => setUi('rover')}
         style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          borderColor: unread > 0 ? 'var(--cyan)' : 'var(--line-soft)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+          background: 'rgba(5,8,13,0.86)',
+          border: `1px solid ${unread > 0 ? 'var(--cyan)' : 'var(--line-soft)'}`,
+          color: 'var(--text)',
+          font: '11px var(--mono)',
+          letterSpacing: '0.1em',
+          padding: '5px 11px',
+          cursor: 'pointer',
         }}
       >
         <span
@@ -111,8 +116,9 @@ export default function RoverDock() {
             animation: listening || speaking || thinking ? 'pulse 0.9s ease-in-out infinite' : undefined,
           }}
         />
-        <span>MERV · {state}</span>
-        <span className="src" style={{ fontSize: 9.5 }}>HOLD [X] TO TALK &middot; [J] TRANSCRIPT</span>
+        <span style={{ color: 'var(--cyan)' }}>MERV</span>
+        <span className="dim">{state}</span>
+        <span className="faint" style={{ fontSize: 10 }}>HOLD [X] TO TALK &middot; [J] TRANSCRIPT</span>
         {unread > 0 && <span className="chip info" style={{ padding: '0 5px' }}>{unread}</span>}
       </button>
     </div>

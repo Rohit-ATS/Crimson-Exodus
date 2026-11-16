@@ -140,6 +140,13 @@ PORT=10000 ALLOWED_ORIGINS=http://localhost:10000 npm start
 | `Enter` | Ingress at the lander and end the EVA |
 | `Esc` | Close a panel |
 
+The six instrument panels — life support, return estimate, environment and
+radiation, the Earth link, the map and the log — are windows rather than
+fixed furniture. They open from the dock along the bottom, drag by their title
+bars, remember where you put them, and start closed. What stays on screen is
+the status bar (EVA clock, limiting consumable, margin, range), any active
+hazard, and whatever is in reach. The screen belongs to the planet.
+
 ---
 
 ## MERV, the rover companion

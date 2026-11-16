@@ -20,7 +20,15 @@ function compute(): number {
   return Math.max(MIN_SCALE, Math.round(s * 100) / 100)
 }
 
-export function useHudScale(): CSSProperties {
+/**
+ * The scale factor on its own.
+ *
+ * Anything that positions itself from a pointer event needs this. `zoom`
+ * leaves `clientX` in real viewport pixels while `left` is interpreted in the
+ * zoomed coordinate space, so a draggable window drifts away from the cursor
+ * on any screen smaller than the design size unless the two are reconciled.
+ */
+export function useHudScaleValue(): number {
   const [auto, setAuto] = useState(compute)
   const manual = useSettings((s) => s.hudScale)
   useEffect(() => {
@@ -28,9 +36,11 @@ export function useHudScale(): CSSProperties {
     window.addEventListener('resize', on)
     return () => window.removeEventListener('resize', on)
   }, [])
-  // The automatic fit stops panels overlapping; the manual setting is the
-  // player's own preference on top of it.
-  const scale = Math.round(auto * manual * 100) / 100
+  return Math.round(auto * manual * 100) / 100
+}
+
+export function useHudScale(): CSSProperties {
+  const scale = useHudScaleValue()
   if (scale >= 0.995 && scale <= 1.005) return {}
   return {
     zoom: scale,

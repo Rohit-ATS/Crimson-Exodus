@@ -10,12 +10,12 @@ import Briefing from './ui/Briefing'
 const Planning = lazy(() => import('./ui/Planning'))
 const Surface = lazy(() => import('./ui/Surface'))
 const Debrief = lazy(() => import('./ui/Debrief'))
-const RoverPanel = lazy(() => import('./ui/panels/RoverPanel'))
 const MissionControl = lazy(() => import('./multiplayer/MissionControl'))
 import DataPanel from './ui/panels/DataPanel'
 import { openDataPanel } from './ui/dataPanelBus'
 import ErrorBoundary from './ui/ErrorBoundary'
 import Coach from './ui/Coach'
+import RoverPanel from './ui/panels/RoverPanel'
 import MultiplayerBridge, { CrewLinkStatus, OpsAdvisory } from './multiplayer/bridge'
 import { useMultiplayer } from './multiplayer/client'
 
@@ -141,11 +141,7 @@ export default function App() {
 
       {data && phase !== 'surface' && <DataPanel onClose={() => setData(false)} />}
 
-      {rover && phase !== 'surface' && (
-        <Suspense fallback={null}>
-          <RoverPanel onClose={() => setRover(false)} />
-        </Suspense>
-      )}
+      {rover && phase !== 'surface' && <RoverPanel onClose={() => setRover(false)} />}
 
       <PhaseTransition phase={phase} />
       <OpsAdvisory />

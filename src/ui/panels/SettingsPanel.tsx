@@ -35,6 +35,11 @@ const KEYS: Array<[string, Array<[string, string]>]> = [
     ['R', 'Swap consumables at a depot in reach'],
     ['Enter', 'Ingress at the lander and end the EVA'],
   ]],
+  ['The screen', [
+    ['Dock buttons', 'Open a HUD window — life support, return, environment, Earth link, map, clocks, log'],
+    ['Drag a title bar', 'Move a window. Where you put it is remembered between runs'],
+    ['SHOW ALL / CLEAR SCREEN', 'Open every window at once, or go back to nothing but the planet'],
+  ]],
   ['Talking to MERV', [
     ['X (hold)', 'Hold to talk to the rover, from anywhere on the surface'],
     ['J', 'Rover comms transcript — type a question, or read the log'],
