@@ -36,8 +36,8 @@ import { normalAt } from '../mission/terrain'
  *  - Red commander stripes on the arms, legs and helmet. A real identification
  *    aid: on Apollo 13 onward the commander wore them, because in a
  *    photograph two white suits are indistinguishable.
- *  - NASA blue 0B3D91 and NASA red FC3D21 are the agency's own brand colours,
- *    used here for the insignia only.
+ *  - No agency insignia. Space Apps rules do not allow NASA branding in
+ *    AI-assisted content, so the suit carries no logo.
  */
 const SUIT = '#f0efea'          // hard upper torso, fibreglass over TMG
 const SUIT_SHADE = '#dcdad3'    // shadowed TMG panels, chest module, gloves
@@ -47,8 +47,6 @@ const BOOT = '#2a2c30'          // boot sole and tread
 const DARK = '#232428'
 const GOLD = '#d7a93f'
 const ACCENT = '#c8102e'        // commander stripe red
-const NASA_BLUE = '#0b3d91'
-const NASA_RED = '#fc3d21'
 
 export default function Jack({
   dust = 0, lampsOn = false, hidden = false, source = live.jack, variant = 'ev1',
@@ -104,8 +102,6 @@ export default function Jack({
         envMapIntensity: 2.6,
       }),
       accent: new THREE.MeshStandardMaterial({ color: variant === 'ev2' ? '#4fe8ff' : ACCENT, roughness: 0.6, envMapIntensity: 0.6 }),
-      blue: new THREE.MeshStandardMaterial({ color: NASA_BLUE, roughness: 0.6, envMapIntensity: 0.6 }),
-      red: new THREE.MeshStandardMaterial({ color: NASA_RED, roughness: 0.6, envMapIntensity: 0.6 }),
       glass: new THREE.MeshStandardMaterial({
         color: '#141a20', roughness: 0.04, metalness: 0.6,
         transparent: true, opacity: 0.42, envMapIntensity: 2.2,
@@ -278,14 +274,6 @@ export default function Jack({
           {/* Waist ring: the hard torso meets the soft lower half here */}
           <mesh position={[0, -0.08, 0]} material={mats.bearing}>
             <cylinderGeometry args={[0.17, 0.17, 0.045, 18]} />
-          </mesh>
-
-          {/* Insignia, left chest. NASA blue and NASA red, the agency's own. */}
-          <mesh position={[-0.112, 0.3, 0.158]} rotation={[0, -0.34, 0]} material={mats.blue}>
-            <circleGeometry args={[0.035, 20]} />
-          </mesh>
-          <mesh position={[-0.113, 0.3, 0.1595]} rotation={[0, -0.34, 0.5]} material={mats.red}>
-            <boxGeometry args={[0.054, 0.006, 0.001]} />
           </mesh>
 
           {/* Chest-mounted display and control module */}
