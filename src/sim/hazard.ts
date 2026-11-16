@@ -144,6 +144,22 @@ export interface ShelterAdvice {
 }
 
 /**
+ * The project's walk-back rule, in one place.
+ *
+ * Margin is already endurance minus the walk home, so "thin" is not a fraction
+ * of the margin — it is a fraction of the walk, plus an absolute floor. Below
+ * either, sheltering stops being an option and the only correct answer is to
+ * start walking.
+ *
+ * Exported because the rover companion gives the player the same advice out
+ * loud, and two thresholds for the same rule would eventually disagree with
+ * each other in front of somebody making a decision.
+ */
+export function marginIsThin(marginMinutes: number, homeMinutes: number): boolean {
+  return marginMinutes < homeMinutes * 0.45 || marginMinutes < 18
+}
+
+/**
  * Where should Jack go right now?
  *
  * The rule the model follows, and states to the player:
@@ -172,8 +188,7 @@ export function shelterAdvice(
   }).sort((a, b) => a.minutes - b.minutes)
 
   // Thin margin: sheltering is a luxury. Go home.
-  const marginIsThin = marginMinutes < homeMinutes * 0.45 || marginMinutes < 18
-  if (marginIsThin) {
+  if (marginIsThin(marginMinutes, homeMinutes)) {
     const home = candidates.find((c) => c.shelter.id === 'lander')!
     return {
       ...home,
