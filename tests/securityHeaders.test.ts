@@ -23,7 +23,16 @@ describe('deployment security policy', () => {
 
   it('configures hardened Vercel response headers', () => {
     const config = JSON.parse(readFileSync('vercel.json', 'utf8'))
-    const headers = new Map(config.headers[0].headers.map(
+    /**
+     * Find the block that matches every path, rather than assuming it is
+     * listed first. Caching rules for `/assets/(.*)` and friends are
+     * legitimately added ahead of it, and a test that breaks when somebody
+     * tunes cache headers is a test that gets deleted.
+     */
+    const catchAll = (config.headers as Array<{ source: string; headers: Array<{ key: string; value: string }> }>)
+      .find((block) => block.source === '/(.*)')
+    assert.ok(catchAll, 'vercel.json has no catch-all header block')
+    const headers = new Map(catchAll.headers.map(
       ({ key, value }: { key: string; value: string }) => [key, value],
     ))
     for (const name of [

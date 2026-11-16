@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import {
-  MULTIPLAYER_PROTOCOL, ROOM_CAPACITY, multiplayerEndpoint, normalizeRoomCode,
+  MULTIPLAYER_PROTOCOL, ROOM_CAPACITY, normalizeRoomCode, resolveMultiplayerEndpoint,
   sameConnectionIntent, type ClientMessage, type ConnectionIntent, type CrewMessage, type MissionSnapshot, type MultiplayerRole,
   type CrewPose, type OpsCommand, type OpsCommandKind, type RosterEntry, type ServerMessage,
 } from './protocol'
@@ -43,7 +43,12 @@ interface MultiplayerState {
 }
 
 const env = (import.meta as unknown as { env: Record<string, string | undefined> }).env ?? {}
-const endpoint = typeof window === 'undefined' ? null : multiplayerEndpoint(env.VITE_MULTIPLAYER_URL, window.location)
+const resolved = typeof window === 'undefined'
+  ? null
+  : resolveMultiplayerEndpoint(env.VITE_MULTIPLAYER_URL, window.location, document)
+const endpoint = resolved && 'url' in resolved ? resolved.url : null
+/** Why there is no endpoint, phrased as something the operator can fix. */
+const endpointProblem = resolved && !('url' in resolved) ? resolved.message : null
 let socket: WebSocket | null = null
 let intent: ConnectionIntent | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -98,10 +103,7 @@ function connect(nextIntent: ConnectionIntent) {
   closedByUser = false
   clearTimers()
   if (!endpoint) {
-    useMultiplayer.setState({
-      status: 'unavailable',
-      error: 'Multiplayer server is not configured for this deployment. Set VITE_MULTIPLAYER_URL to the Render wss:// endpoint.',
-    })
+    useMultiplayer.setState({ status: 'unavailable', error: endpointProblem })
     return
   }
   socket?.close()
@@ -213,7 +215,9 @@ export const useMultiplayer = create<MultiplayerState>((set, get) => ({
   role: null,
   peerConnected: false,
   latencyMs: null,
-  error: null,
+  // Stated up front, not held back until somebody clicks. A lobby that says
+  // "unavailable" and nothing else sends the operator to the source.
+  error: endpointProblem,
   snapshot: null,
   history: [],
   commands: [],

@@ -115,8 +115,40 @@ That keeps the mission independent of a database and avoids retaining player
 telemetry after the session. Identities are never stored server-side beyond the
 life of the room.
 
-The Render-hosted frontend discovers its own secure WebSocket endpoint. To make
-the existing GitHub Pages deployment use the same service:
+### Pointing a frontend at the server
+
+`VITE_MULTIPLAYER_URL` is a **build-time** variable. Vite compiles it into the
+bundle, so setting it in a hosting dashboard and restarting changes nothing —
+the site has to be rebuilt.
+
+| Where the page is served from | What to set |
+|---|---|
+| Anything served by `server/index.mjs` — Render, a custom domain in front of it, your own box | **nothing** |
+| `localhost` / `127.0.0.1` | nothing |
+| GitHub Pages, or any static host with no backend | `VITE_MULTIPLAYER_URL=wss://your-service.onrender.com/ws` |
+| A host that serves both but that you would rather configure explicitly | `VITE_MULTIPLAYER_URL=same-origin` |
+
+The first row works because the server stamps a `<meta name="crew-link">` into
+the `index.html` it serves. A browser cannot otherwise tell whether the site it
+loaded from has a WebSocket server behind it, and the hostname is a poor proxy:
+a custom domain in front of the real server looks exactly like a static host.
+GitHub Pages publishes the same `index.html` straight out of the build and
+stamps nothing, so it still correctly asks to be told where the server is.
+
+The handshake follows the same principle. A page served by this server is
+same-origin by definition, so it is accepted whatever the domain is called —
+`ALLOWED_ORIGINS` is only needed for genuinely cross-origin setups such as
+GitHub Pages talking to Render. That check lives in `server/origin.mjs` and is
+unit-tested, including against the suffix-matching hole that would let
+`yourdomain.com.evil.test` through.
+
+If the crew link reports itself unavailable, the lobby now says which of the
+three cases it hit: the variable was never set, it was set to something that is
+not a URL, or it was set to an `https://` address when a socket needs `wss://`.
+Copying the service URL straight out of a dashboard produces the last one, and
+it is by far the most common mistake.
+
+To make the existing GitHub Pages deployment use the same service:
 
 1. Deploy the Render Blueprint and copy its `https://…onrender.com` URL.
 2. Change the scheme to `wss://` and append `/ws`.
