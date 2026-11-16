@@ -132,6 +132,8 @@ let sincePromptPush = 0
 let seq = 0
 /** Bumped per spoken line, so a superseded stream stops queueing audio. */
 let speakSeq = 0
+/** Invalidates a mic startup if the player releases while auth is refreshing. */
+let talkSeq = 0
 /** Which EVA the current link belongs to. See `boot`. */
 let bootedRun: string | null = null
 
@@ -397,14 +399,22 @@ export const useMerv = create<MervState & MervActions>((set, get) => ({
    */
   startTalking: async () => {
     if (get().listening || get().tier === 'agent') return
+    const talkId = ++talkSeq
     const tier = get().tier
     /** Set when the Deepgram path failed and we dropped to the browser's. */
     let downgraded: string | null = null
 
-    if (tier === 'grounded' && cred) {
+    if (tier === 'grounded') {
       try {
+        // Render grants expire after sixty seconds. Resolve the cached token
+        // again at use time so a long-open mission does not keep presenting
+        // the token it received during boot to the Listen WebSocket.
+        const activeCred = await refreshCredential()
+        if (talkId !== talkSeq) return
+        if (!activeCred) throw new Error('No current Deepgram credential')
         mic = mic ?? await openMic()
-        stt = transcribe(cred, cfg, mic.rate, {
+        if (talkId !== talkSeq) { mic.mute(true); return }
+        stt = transcribe(activeCred, cfg, mic.rate, {
           onOpen: () => set({ listening: true, error: null }),
           onInterim: (t) => set({ interim: t }),
           onFinal: (t) => { set({ interim: '' }); void get().ask(t) },
@@ -420,6 +430,7 @@ export const useMerv = create<MervState & MervActions>((set, get) => ({
         set({ listening: true })
         return
       } catch (err) {
+        if (talkId !== talkSeq) return
         // Falling through to the browser engine below is the right behaviour,
         // but it must not look like success. A silent downgrade here is what
         // hid a dead speech-to-text path during development: the Deepgram
@@ -429,6 +440,8 @@ export const useMerv = create<MervState & MervActions>((set, get) => ({
         downgraded = 'Deepgram speech-to-text did not come up, so this is the browser\'s own engine. Typing still works.'
       }
     }
+
+    if (talkId !== talkSeq) return
 
     const Recog = browserRecognition()
     if (!Recog) {
@@ -463,6 +476,7 @@ export const useMerv = create<MervState & MervActions>((set, get) => ({
 
   stopTalking: () => {
     if (get().tier === 'agent') return
+    talkSeq += 1
     try { stt?.finish() } catch { /* ignore */ }
     try { recog?.stop() } catch { /* ignore */ }
     recog = null
@@ -612,6 +626,20 @@ async function prewarmMic(): Promise<void> {
   }
 }
 
+/** Fetch a usable cached token at the moment a Deepgram session needs it. */
+async function refreshCredential(): Promise<Credential | null> {
+  try {
+    cred = await credential(cfg, {
+      hostname: window.location.hostname,
+      dev: !!(import.meta as unknown as { env: { DEV?: boolean } }).env?.DEV,
+    })
+    return cred
+  } catch {
+    cred = null
+    return null
+  }
+}
+
 async function speakOut(text: string, set: Set, get: Get): Promise<void> {
   const s = get()
   if (s.muted || !useSettings.getState().audio) return
@@ -625,43 +653,46 @@ async function speakOut(text: string, set: Set, get: Get): Promise<void> {
   localStop = null
   player?.stop()
 
-  if (s.tier === 'grounded' && cred) {
-    const controller = new AbortController()
-    speakAbort = controller
-    try {
-      set({ speaking: true })
-      live.rover.talking = 1
-      /**
-       * Each chunk is queued the moment it lands rather than after the whole
-       * line has been synthesised. The player schedules frames end to end, so
-       * handing it the audio progressively is seamless — and it is what makes
-       * MERV answer in about a third of a second instead of after a pause
-       * that scaled with how good the answer was.
-       */
-      await speakDeepgramStream(text, cred, cfg, (pcm) => {
-        // A newer line started while this one was still arriving: drop the
-        // rest of it rather than talking over himself.
-        if (speakId === speakSeq) ensurePlayer().push(pcm)
-      }, controller.signal)
-      if (speakAbort === controller) speakAbort = null
-      if (speakId !== speakSeq) return
-      // Release the talking flag when the queued audio has actually finished.
-      window.setTimeout(() => {
+  if (s.tier === 'grounded') {
+    const activeCred = await refreshCredential()
+    if (activeCred) {
+      const controller = new AbortController()
+      speakAbort = controller
+      try {
+        set({ speaking: true })
+        live.rover.talking = 1
+        /**
+         * Each chunk is queued the moment it lands rather than after the whole
+         * line has been synthesised. The player schedules frames end to end, so
+         * handing it the audio progressively is seamless — and it is what makes
+         * MERV answer in about a third of a second instead of after a pause
+         * that scaled with how good the answer was.
+         */
+        await speakDeepgramStream(text, activeCred, cfg, (pcm) => {
+          // A newer line started while this one was still arriving: drop the
+          // rest of it rather than talking over himself.
+          if (speakId === speakSeq) ensurePlayer().push(pcm)
+        }, controller.signal)
+        if (speakAbort === controller) speakAbort = null
         if (speakId !== speakSeq) return
-        set({ speaking: false })
-        live.rover.talking = 0
-      }, (player?.pending ?? 0) * 1000 + 160)
-      return
-    } catch (err) {
-      if (speakAbort === controller) speakAbort = null
-      // An explicit interruption is not a synthesis failure, and must not
-      // start a local voice after the player was stopped.
-      if (speakId !== speakSeq || controller.signal.aborted) return
-      console.warn('[MERV] Deepgram speech failed, using the local engine:', err)
-      forgetCredential()
-      // A partial Deepgram line may already have been queued. Clear it before
-      // speaking the complete line locally to avoid overlap and repetition.
-      player?.stop()
+        // Release the talking flag when the queued audio has actually finished.
+        window.setTimeout(() => {
+          if (speakId !== speakSeq) return
+          set({ speaking: false })
+          live.rover.talking = 0
+        }, (player?.pending ?? 0) * 1000 + 160)
+        return
+      } catch (err) {
+        if (speakAbort === controller) speakAbort = null
+        // An explicit interruption is not a synthesis failure, and must not
+        // start a local voice after the player was stopped.
+        if (speakId !== speakSeq || controller.signal.aborted) return
+        console.warn('[MERV] Deepgram speech failed, using the local engine:', err)
+        forgetCredential()
+        // A partial Deepgram line may already have been queued. Clear it before
+        // speaking the complete line locally to avoid overlap and repetition.
+        player?.stop()
+      }
     }
   }
 

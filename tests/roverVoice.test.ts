@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  authHeader, rawKeyAllowed, readConfig, resolveTier, subprotocols,
+  authHeader, credential, forgetCredential, rawKeyAllowed, readConfig, resolveTier, subprotocols,
 } from '../src/ai/voice.ts'
 
 const cfg = (over: Record<string, string> = {}) => readConfig(over)
@@ -58,5 +58,38 @@ describe('MERV tier selection', () => {
     assert.equal(c.want, 'auto')
     assert.equal(c.apiKey, null)
     assert.equal(c.tokenUrl, null)
+  })
+})
+
+describe('MERV short-lived Deepgram credentials', () => {
+  it('refreshes a token before it enters its final thirty seconds', async () => {
+    forgetCredential()
+    const realNow = Date.now
+    let now = 1_000_000
+    let grants = 0
+    Date.now = () => now
+    const fetchImpl: typeof fetch = async () => new Response(JSON.stringify({
+      access_token: `short-token-${++grants}`,
+      expires_in: 60,
+    }), { status: 200 })
+
+    try {
+      const options = { hostname: 'www.crimsonexodus.us', dev: false, fetchImpl }
+      const first = await credential(cfg({ VITE_DEEPGRAM_TOKEN_URL: '/api/deepgram-token' }), options)
+      assert.equal(first?.value, 'short-token-1')
+
+      now += 20_000
+      const stillUsable = await credential(cfg({ VITE_DEEPGRAM_TOKEN_URL: '/api/deepgram-token' }), options)
+      assert.equal(stillUsable?.value, 'short-token-1')
+      assert.equal(grants, 1)
+
+      now += 11_000
+      const refreshed = await credential(cfg({ VITE_DEEPGRAM_TOKEN_URL: '/api/deepgram-token' }), options)
+      assert.equal(refreshed?.value, 'short-token-2')
+      assert.equal(grants, 2)
+    } finally {
+      Date.now = realNow
+      forgetCredential()
+    }
   })
 })
