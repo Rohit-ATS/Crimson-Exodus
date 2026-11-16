@@ -8,7 +8,9 @@ services:
     buildCommand: npm ci && npm run verify
     startCommand: npm run multiplayer:start
     healthCheckPath: /health
-    autoDeployTrigger: checksPass
+    # Deploy every pushed commit. `checksPass` can leave the live WebSocket
+    # protocol behind when a Pages-only GitHub check is not reported to Render.
+    autoDeployTrigger: commit
     envVars:
       - key: NODE_VERSION
         value: 22.14.0

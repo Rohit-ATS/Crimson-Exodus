@@ -23,7 +23,9 @@ describe('deployment security policy', () => {
 
   it('configures hardened Vercel response headers', () => {
     const config = JSON.parse(readFileSync('vercel.json', 'utf8'))
-    const headers = new Map(config.headers[0].headers.map(
+    const policy = config.headers.find((entry: { source: string }) => entry.source === '/(.*)')
+    assert.ok(policy, 'catch-all Vercel security header block')
+    const headers = new Map(policy.headers.map(
       ({ key, value }: { key: string; value: string }) => [key, value],
     ))
     for (const name of [
@@ -47,6 +49,7 @@ describe('deployment security policy', () => {
     for (const expected of [
       'type: web', 'runtime: node', 'plan: 0.5c-512mb',
       'numInstances: 1', 'healthCheckPath: /health',
+      'autoDeployTrigger: commit',
       'startCommand: npm run multiplayer:start',
     ]) assert.ok(blueprint.includes(expected), expected)
     const server = readFileSync('server/index.mjs', 'utf8')
