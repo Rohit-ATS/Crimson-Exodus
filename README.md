@@ -191,6 +191,15 @@ Both the `grounded` and `agent` tiers resolve "can I keep going" through the sam
 function the offline tier uses, so the advice cannot change depending on whether
 somebody set a key.
 
+Both Deepgram tiers have been exercised end-to-end against the live API, with a
+spoken question fed to Chromium as a fake microphone, so the whole capture
+chain runs for real: `getUserMedia`, the worklet, the PCM framing, the socket,
+Deepgram speech-to-text, this project's brain, Deepgram synthesis. On the
+`agent` tier the hosted model answered "how cold does it get out here" with
+"minus eighty or lower before dawn, and the swing in a single sol is eighty to
+a hundred degrees" — this repository's own sourced figures, read back rather
+than recalled, which is the grounding doing its job.
+
 ### Configuring it
 
 Copy `.env.example` to `.env.local`. Everything in it is optional.
