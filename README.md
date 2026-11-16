@@ -74,7 +74,15 @@ The app's NASA photographs are real mission images, not generated scenery. A sel
 
 </div>
 
-**Video:** the repository currently contains in-app screenshots and NASA still imagery, but no recorded video files. The live site is linked above; we have not embedded a video that does not exist.
+**Video note:** there is no recorded gameplay video in the repository. The animated screenshot reel below is assembled from the app captures, and the live mission is linked above.
+
+<div align="center">
+
+[![17-frame screenshot reel](docs/crimson-exodus-screenshot-reel.gif)](docs/crimson-exodus-screenshot-reel.gif)
+
+*A short animated reel made from all 17 application screenshots. This is a screenshot tour, not a recorded gameplay video.*
+
+</div>
 
 <details>
 <summary>Open the complete 17-image app gallery</summary>
