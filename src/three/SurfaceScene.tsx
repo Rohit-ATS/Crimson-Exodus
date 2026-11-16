@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useStore } from '../state/store'
-import { live } from '../state/live'
+import { jackView, live } from '../state/live'
 import { renderTier, useSettings } from '../state/settings'
 import { heightAt } from '../mission/terrain'
 import { mastStation } from '../state/useSimLoop'
@@ -253,7 +253,7 @@ function SunLight({ dir, color, intensity }: { dir: THREE.Vector3; color: THREE.
   useFrame(() => {
     const l = light.current
     if (!l) return
-    const j = live.jack
+    const j = jackView()
     l.position.set(j.x + dir.x * 220, j.y + dir.y * 220, j.z + dir.z * 220)
     target.position.set(j.x, j.y, j.z)
     target.updateMatrixWorld()
@@ -297,7 +297,8 @@ function CameraRig() {
   const lookTarget = useRef(new THREE.Vector3())
 
   useFrame((_, dt) => {
-    const j = live.jack
+    // Follow where Jack is drawn, not the raw 20 Hz simulation position.
+    const j = jackView()
     const k = Math.min(1, dt * 5.2)
 
     if (live.firstPerson) {
