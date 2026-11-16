@@ -1,9 +1,11 @@
 import { create } from 'zustand'
 import {
-  MULTIPLAYER_PROTOCOL, multiplayerEndpoint, normalizeRoomCode,
+  MULTIPLAYER_PROTOCOL, ROOM_CAPACITY, multiplayerEndpoint, normalizeRoomCode,
   sameConnectionIntent, type ClientMessage, type ConnectionIntent, type CrewMessage, type MissionSnapshot, type MultiplayerRole,
-  type OpsCommand, type OpsCommandKind, type ServerMessage,
+  type OpsCommand, type OpsCommandKind, type RosterEntry, type ServerMessage,
 } from './protocol'
+import { playerIdentity } from '../state/identity'
+import { debugGlobalsEnabled, type DebugGlobalTarget } from '../state/debugGlobals'
 
 type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'unavailable' | 'error'
 
@@ -18,6 +20,11 @@ interface MultiplayerState {
   snapshot: MissionSnapshot | null
   history: CrewMessage[]
   commands: OpsCommand[]
+  /** Everyone in the room, including you. */
+  roster: RosterEntry[]
+  capacity: number
+  /** This tab's throwaway callsign, shown so a player knows who they are. */
+  callsign: string
   resumableEvRoom: string | null
   resumableHabcomRoom: string | null
   createMission: () => void
@@ -101,10 +108,17 @@ function connect(nextIntent: ConnectionIntent) {
   ws.addEventListener('open', () => {
     const current = intent
     if (!current) return
+    // The identity goes with every attempt, including reconnects. It is what
+    // lets the room hand this tab its own seat back instead of reporting the
+    // station as occupied by the socket that just died.
+    const { playerId, callsign } = playerIdentity()
     if (current.mode === 'create') {
-      transmit({ type: 'create', protocol: MULTIPLAYER_PROTOCOL })
+      transmit({ type: 'create', protocol: MULTIPLAYER_PROTOCOL, playerId, callsign })
     } else {
-      transmit({ type: 'join', protocol: MULTIPLAYER_PROTOCOL, roomCode: current.roomCode, role: current.role, resumeToken: current.resumeToken })
+      transmit({
+        type: 'join', protocol: MULTIPLAYER_PROTOCOL, roomCode: current.roomCode,
+        role: current.role, playerId, callsign, resumeToken: current.resumeToken,
+      })
     }
     pingTimer = setInterval(() => transmit({ type: 'ping', at: Date.now() }), 20_000)
   })
@@ -121,11 +135,31 @@ function connect(nextIntent: ConnectionIntent) {
         status: 'connected', roomCode: message.roomCode, role: message.role,
         peerConnected: message.peerConnected, snapshot: message.snapshot,
         history: message.history, commands: message.commands, error: null,
+        roster: message.roster ?? [], capacity: message.capacity ?? ROOM_CAPACITY,
+        callsign: message.callsign || state.callsign,
         resumableEvRoom: message.role === 'ev' ? message.roomCode : state.resumableEvRoom,
         resumableHabcomRoom: message.role === 'habcom' ? message.roomCode : state.resumableHabcomRoom,
       })
+    } else if (message.type === 'roster') {
+      /**
+       * The roster is authoritative for "is anybody else here".
+       *
+       * The old `peer` message could not answer that once a room could hold
+       * more than two: when one of three HABCOM clients dropped, every other
+       * client was told a peer disconnected and EV-1 would show itself as
+       * alone while two people were still watching.
+       */
+      const roster = message.roster ?? []
+      useMultiplayer.setState({
+        roster,
+        capacity: message.capacity ?? state.capacity,
+        peerConnected: roster.filter((entry) => !entry.you).length > 0,
+      })
     } else if (message.type === 'peer') {
-      if (message.role !== state.role) useMultiplayer.setState({ peerConnected: message.connected })
+      // Kept for older servers that send no roster.
+      if (!state.roster.length && message.role !== state.role) {
+        useMultiplayer.setState({ peerConnected: message.connected })
+      }
     } else if (message.type === 'snapshot') {
       useMultiplayer.setState({ snapshot: message.snapshot })
     } else if (message.type === 'command') {
@@ -171,6 +205,9 @@ export const useMultiplayer = create<MultiplayerState>((set, get) => ({
   snapshot: null,
   history: [],
   commands: [],
+  roster: [],
+  capacity: ROOM_CAPACITY,
+  callsign: typeof window === 'undefined' ? '' : playerIdentity().callsign,
   resumableEvRoom: typeof window === 'undefined' ? null : savedSession('ev')?.roomCode ?? null,
   resumableHabcomRoom: typeof window === 'undefined' ? null : savedSession('habcom')?.roomCode ?? null,
 
@@ -205,7 +242,7 @@ export const useMultiplayer = create<MultiplayerState>((set, get) => ({
     set({
       status: endpoint ? 'idle' : 'unavailable', roomCode: null, role: null,
       peerConnected: false, latencyMs: null, error: null, snapshot: null,
-      history: [], commands: [],
+      history: [], commands: [], roster: [],
       resumableEvRoom: role === 'ev' ? null : get().resumableEvRoom,
       resumableHabcomRoom: role === 'habcom' ? null : get().resumableHabcomRoom,
     })
@@ -220,3 +257,12 @@ export const useMultiplayer = create<MultiplayerState>((set, get) => ({
   },
   sendChat: (text) => transmit({ type: 'chat', text: text.slice(0, 240) }),
 }))
+
+/**
+ * Browser automation can drive the crew link: create a room, join one, read
+ * the roster. Opt-in through the same flag the mission store uses, so an
+ * ordinary session publishes nothing.
+ */
+if (typeof window !== 'undefined' && debugGlobalsEnabled(import.meta.env)) {
+  ;(window as unknown as DebugGlobalTarget).__mp = useMultiplayer
+}

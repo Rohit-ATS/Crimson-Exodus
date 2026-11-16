@@ -2,6 +2,19 @@ import { randomBytes } from 'node:crypto'
 
 export const PROTOCOL = 1
 export const ROOM_CODE_RE = /^[A-Z0-9]{6}$/
+
+/**
+ * Room capacity.
+ *
+ * One EV-1, because exactly one person drives Jack and publishes telemetry,
+ * and up to three at HABCOM watching the same feed. Four is the number a
+ * small team demos with. These must stay in step with ROOM_CAPACITY and
+ * ROLE_CAPACITY in src/multiplayer/protocol.ts; a test asserts that they do.
+ */
+export const ROOM_CAPACITY = 4
+export const ROLE_CAPACITY = { ev: 1, habcom: 3 }
+export const PLAYER_ID_RE = /^crew_[0-9a-f]{24}$/
+export const CALLSIGN_RE = /^CREW-[A-Z0-9]{3}$/
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 const ROOM_TTL_MS = 30 * 60 * 1000
 const MAX_HISTORY = 60
@@ -9,6 +22,22 @@ const MAX_COMMANDS = 30
 const MAX_ROOMS = 1000
 
 const id = (prefix) => `${prefix}_${randomBytes(8).toString('hex')}`
+
+/**
+ * A readable name for a client that did not bring one.
+ *
+ * Nobody should appear in a roster as an opaque id, and a client whose
+ * storage is blocked still deserves to be distinguishable from the others.
+ */
+function autoCallsign(room, role) {
+  const taken = new Set([...room.clients.values()].map((client) => client.callsign))
+  const stem = role === 'ev' ? 'EV' : 'HAB'
+  for (let n = 1; n < 100; n += 1) {
+    const candidate = `CREW-${stem}${n}`
+    if (!taken.has(candidate)) return candidate
+  }
+  return `CREW-${stem}`
+}
 
 function roomCode() {
   let out = ''
@@ -77,10 +106,24 @@ export function validateSnapshot(raw) {
   }
 }
 
+/**
+ * Normalise whatever the browser sent as an identity.
+ *
+ * Both fields are optional on the wire: an older client, or one whose
+ * storage is blocked, simply joins without an id and is treated as a new
+ * person every time — which is the behaviour this replaced, so it stays
+ * correct rather than failing.
+ */
+export function readIdentity(raw = {}) {
+  const playerId = typeof raw.playerId === 'string' && PLAYER_ID_RE.test(raw.playerId) ? raw.playerId : null
+  const callsign = typeof raw.callsign === 'string' && CALLSIGN_RE.test(raw.callsign) ? raw.callsign : null
+  return { playerId, callsign }
+}
+
 export class RoomRegistry {
   constructor() { this.rooms = new Map() }
 
-  create(connection) {
+  create(connection, options = {}) {
     this.sweep()
     if (this.rooms.size >= MAX_ROOMS) throw Object.assign(new Error('Mission room capacity reached. Try again shortly.'), { code: 'CAPACITY' })
     let code
@@ -90,32 +133,116 @@ export class RoomRegistry {
       clients: new Map(), tokens: new Map(), history: [], commands: [],
     }
     this.rooms.set(code, room)
-    return this.attach(room, 'ev', connection)
+    return this.attach(room, 'ev', connection, options)
   }
 
-  join(code, role, connection, resumeToken) {
+  /**
+   * Seat somebody in a room.
+   *
+   * `options` is `{ playerId, callsign, resumeToken }`. A bare string is
+   * accepted as the resume token so older callers keep working.
+   *
+   * The order of these checks is the whole fix for the bug this replaced.
+   * Before, any client already holding the role made the join fail — so your
+   * OWN dead socket, still seated because its close event had not arrived
+   * yet, reported the station as occupied when you refreshed. Now the first
+   * question asked is "is this the same person coming back", and only after
+   * that does capacity come into it.
+   */
+  join(code, role, connection, options = {}) {
+    const opts = typeof options === 'string' ? { resumeToken: options } : (options ?? {})
+    const { playerId, callsign } = readIdentity(opts)
+    const resumeToken = typeof opts.resumeToken === 'string' ? opts.resumeToken : undefined
+
     if (!ROOM_CODE_RE.test(code)) throw Object.assign(new Error('Mission code must contain six letters or numbers.'), { code: 'ROOM_CODE_INVALID' })
     const room = this.rooms.get(code)
     if (!room) throw Object.assign(new Error('Mission room not found.'), { code: 'ROOM_NOT_FOUND' })
     if (!['ev', 'habcom'].includes(role)) throw Object.assign(new Error('Unsupported crew role.'), { code: 'ROLE_INVALID' })
-    const existing = [...room.clients.values()].find((client) => client.role === role)
-    const resumed = resumeToken && room.tokens.get(resumeToken) === role
-    if (existing && !resumed) throw Object.assign(new Error(`${role === 'ev' ? 'EV-1' : 'HABCOM'} station is already occupied.`), { code: 'ROLE_TAKEN' })
-    if (existing && resumed) {
-      // Release the role synchronously. Waiting for the socket's asynchronous
-      // close event leaves a brief window with two owners of one crew station.
-      this.detach(room, existing)
-      existing.connection.close(4001, 'Session resumed elsewhere')
+
+    // 1. The same person, back again. Reclaim whichever seat they held — if
+    //    they were EV-1 before a reload, they are still EV-1 now, whatever
+    //    the lobby asked for.
+    const mine = playerId
+      ? [...room.clients.values()].find((client) => client.playerId === playerId)
+      : null
+    if (mine) {
+      this.detach(room, mine)
+      mine.connection.close(4001, 'Session resumed elsewhere')
+      return this.attach(room, mine.role, connection, { playerId, callsign, token: mine.token })
     }
-    return this.attach(room, role, connection, resumed ? resumeToken : undefined)
+
+    /**
+     * 2. A resume token. Kept for clients that bring no identity.
+     *
+     * The token identifies ONE CLIENT, not a role. That distinction did not
+     * exist while a room held a single HABCOM — "the client with this role"
+     * and "the client with this token" were the same person. With three
+     * HABCOM seats they are not, and resuming evicted whichever HABCOM
+     * happened to be first in the map: a different human, thrown out of the
+     * mission by somebody else reloading their browser.
+     */
+    const tokenRole = room.tokens.get(resumeToken)
+    if (resumeToken && tokenRole === role) {
+      const holder = [...room.clients.values()].find((client) => client.token === resumeToken)
+      if (holder) {
+        // Release that seat synchronously. Waiting for the socket's own close
+        // event leaves a window with two owners of one crew station.
+        this.detach(room, holder)
+        holder.connection.close(4001, 'Session resumed elsewhere')
+        return this.attach(room, holder.role, connection, { playerId, callsign, token: resumeToken })
+      }
+      // The token is ours but its connection has already gone. There is no
+      // seat to reclaim, so fall through: take a free one if the room has
+      // one, and be refused if it does not. Never evict somebody else.
+    }
+
+    // 3. Somebody new. Is there room, and is there room at that station?
+    if (room.clients.size >= ROOM_CAPACITY) {
+      throw Object.assign(
+        new Error(`Mission room is full (${ROOM_CAPACITY} crew).`),
+        { code: 'ROOM_FULL' },
+      )
+    }
+    const seated = [...room.clients.values()].filter((client) => client.role === role).length
+    if (seated >= ROLE_CAPACITY[role]) {
+      const station = role === 'ev' ? 'EV-1' : 'HABCOM'
+      throw Object.assign(
+        new Error(
+          role === 'ev'
+            ? 'EV-1 is already crewed. Join as HABCOM instead.'
+            : `All ${ROLE_CAPACITY.habcom} ${station} positions are occupied.`,
+        ),
+        { code: 'ROLE_TAKEN' },
+      )
+    }
+    return this.attach(room, role, connection, { playerId, callsign })
   }
 
-  attach(room, role, connection, token = id('resume')) {
-    const client = { id: id('crew'), role, token, connection, detached: false }
+  attach(room, role, connection, options = {}) {
+    const token = options.token ?? id('resume')
+    const client = {
+      id: id('crew'),
+      role,
+      token,
+      playerId: options.playerId ?? null,
+      callsign: options.callsign ?? autoCallsign(room, role),
+      connection,
+      detached: false,
+    }
     room.clients.set(client.id, client)
     room.tokens.set(token, role)
     room.emptyAt = null
     return { room, client }
+  }
+
+  /** Everyone currently in the room, in join order. */
+  occupants(room, forClient = null) {
+    return [...room.clients.values()].map((client) => ({
+      clientId: client.id,
+      role: client.role,
+      callsign: client.callsign,
+      ...(forClient && client.id === forClient.id ? { you: true } : {}),
+    }))
   }
 
   detach(room, client) {

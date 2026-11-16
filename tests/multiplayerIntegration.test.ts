@@ -154,4 +154,101 @@ describe('Render multiplayer service', () => {
     habcom.close()
     resumed.close()
   })
+
+  it('seats four crew, refuses the fifth, and lets a refreshed player back in', async () => {
+    /**
+     * The bug this covers, end to end, against the real server process.
+     *
+     * Reported from the deployed build: the room was created, a second
+     * player tried to join, and the server said the station was already
+     * occupied. Two separate causes, both fixed here — the room only ever
+     * had two seats, and a player's own dead socket counted against them
+     * when they came back.
+     */
+    const identity = (n: number) => ({
+      playerId: `crew_${String(n).padStart(24, '0')}`,
+      callsign: `CREW-${String.fromCharCode(65 + n)}${n}${n}`,
+    })
+
+    const ev = await openSocket()
+    ev.send(JSON.stringify({ type: 'create', protocol: 1, ...identity(1) }))
+    const hosted = await nextMessage<{
+      type: 'joined'; roomCode: string; callsign: string; capacity: number
+      roster: Array<{ callsign: string; role: string; you?: boolean }>
+    }>(ev, 'joined')
+    assert.equal(hosted.capacity, 4)
+    assert.equal(hosted.callsign, identity(1).callsign)
+    assert.equal(hosted.roster.length, 1)
+    assert.equal(hosted.roster[0].you, true)
+
+    // Three more at HABCOM. Every one of these used to be refused.
+    const habs: WebSocket[] = []
+    for (let n = 2; n <= 4; n += 1) {
+      const socket = await openSocket()
+      socket.send(JSON.stringify({
+        type: 'join', protocol: 1, roomCode: hosted.roomCode, role: 'habcom', ...identity(n),
+      }))
+      const joined = await nextMessage<{ type: 'joined'; role: string; roster: unknown[] }>(socket, 'joined')
+      assert.equal(joined.role, 'habcom', `crew member ${n} was refused`)
+      assert.equal(joined.roster.length, n)
+      habs.push(socket)
+    }
+
+    // The fifth is refused, and says the room is full rather than claiming a
+    // station is occupied while seats are free.
+    const fifth = await openSocket()
+    fifth.send(JSON.stringify({
+      type: 'join', protocol: 1, roomCode: hosted.roomCode, role: 'habcom', ...identity(5),
+    }))
+    const refused = await nextMessage<{ type: 'error'; code: string; message: string }>(fifth, 'error')
+    assert.equal(refused.code, 'ROOM_FULL')
+    assert.match(refused.message, /full/i)
+    fifth.close()
+
+    // A HABCOM player refreshes: same identity, brand new socket, and the old
+    // one has NOT closed yet. They must get their own seat back.
+    const refreshed = await openSocket()
+    refreshed.send(JSON.stringify({
+      type: 'join', protocol: 1, roomCode: hosted.roomCode, role: 'habcom', ...identity(3),
+    }))
+    const back = await nextMessage<{
+      type: 'joined'; role: string; callsign: string; roster: unknown[]
+    }>(refreshed, 'joined')
+    assert.equal(back.role, 'habcom')
+    assert.equal(back.callsign, identity(3).callsign)
+    // Still four aboard: they reclaimed a seat rather than taking a new one.
+    assert.equal(back.roster.length, 4)
+
+    // And everyone else is told who is in the room.
+    const rosterUpdate = await nextMessage<{
+      type: 'roster'; roster: Array<{ callsign: string }>; capacity: number
+    }>(ev, 'roster')
+    assert.equal(rosterUpdate.capacity, 4)
+    assert.equal(rosterUpdate.roster.length, 4)
+
+    ev.close()
+    refreshed.close()
+    for (const socket of habs) socket.close()
+  })
+
+  it('does not let a second player take the EV-1 driving seat', async () => {
+    const ev = await openSocket()
+    ev.send(JSON.stringify({
+      type: 'create', protocol: 1, playerId: `crew_${'1'.repeat(24)}`, callsign: 'CREW-AA2',
+    }))
+    const hosted = await nextMessage<{ type: 'joined'; roomCode: string }>(ev, 'joined')
+
+    const intruder = await openSocket()
+    intruder.send(JSON.stringify({
+      type: 'join', protocol: 1, roomCode: hosted.roomCode, role: 'ev',
+      playerId: `crew_${'2'.repeat(24)}`, callsign: 'CREW-BB3',
+    }))
+    const refused = await nextMessage<{ type: 'error'; code: string; message: string }>(intruder, 'error')
+    assert.equal(refused.code, 'ROLE_TAKEN')
+    // The message has to tell them what to do instead.
+    assert.match(refused.message, /HABCOM/)
+
+    ev.close()
+    intruder.close()
+  })
 })

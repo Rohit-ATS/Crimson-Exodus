@@ -81,6 +81,25 @@ messages and `GO`, `HOLD` or `RETURN` recommendations. The latter two never seiz
 the suit controls: EV-1 must acknowledge them before they pause the mission or
 start the return traverse.
 
+A room holds **four**: one EV-1, because exactly one person drives Jack and
+publishes telemetry, and up to three at HABCOM watching the same feed.
+
+**There is no sign-up, and there are no accounts.** Every visitor is handed a
+throwaway identity the moment the page loads — random bytes and a readable
+callsign like `CREW-7Q4`, kept in `sessionStorage` and gone when the tab
+closes. It authorises nothing. Its only job is to let a room tell three
+situations apart: a new person who needs a seat, the same person coming back
+after a refresh or a dropped connection, and a second tab on the same machine,
+which is how almost everybody tests a multiplayer build.
+
+Without it the server could only guess, and it guessed wrong in the most
+visible way: after a refresh your own dead socket still held your seat, so
+rejoining reported the station as already occupied. Now the first question the
+room asks is "is this the same person", and capacity is only consulted after
+that. Storage is `sessionStorage` rather than `localStorage` on purpose —
+`localStorage` is shared between tabs, so two tabs would carry one identity and
+the second would evict the first.
+
 `render.yaml` provisions one paid Node Web Service that builds and serves `dist/`,
 accepts the crew link on `/ws`, exposes `/health`, and optionally mints 60-second
 Deepgram tokens at `/api/deepgram-token`. Connect a Render Blueprint to this
@@ -89,8 +108,9 @@ dashboard to upgrade MERV's voice, or omit it to keep the local voice tier.
 
 Room state is intentionally short-lived and held by the single service instance:
 empty rooms expire after 30 minutes, and a service deploy ends active sessions.
-That keeps the two-player mission independent of a database and avoids retaining
-player telemetry after the session.
+That keeps the mission independent of a database and avoids retaining player
+telemetry after the session. Identities are never stored server-side beyond the
+life of the room.
 
 The Render-hosted frontend discovers its own secure WebSocket endpoint. To make
 the existing GitHub Pages deployment use the same service:

@@ -1,10 +1,29 @@
 export const MULTIPLAYER_PROTOCOL = 1 as const
 
+/**
+ * How many people can be in one mission room.
+ *
+ * One EV-1, because exactly one person drives Jack and publishes telemetry,
+ * and up to three at HABCOM — a flight director and two others watching the
+ * same feed. Four is the number a small team actually demos with.
+ */
+export const ROOM_CAPACITY = 4
+export const ROLE_CAPACITY: Record<MultiplayerRole, number> = { ev: 1, habcom: 3 }
+
 export type MultiplayerRole = 'ev' | 'habcom'
 export type OpsCommandKind = 'go' | 'hold' | 'return'
 export type ConnectionIntent =
   | { mode: 'create' }
   | { mode: 'join'; roomCode: string; role: MultiplayerRole; resumeToken?: string }
+
+/** One person in the room, as everybody else sees them. */
+export interface RosterEntry {
+  clientId: string
+  role: MultiplayerRole
+  callsign: string
+  /** True for the entry describing the recipient. */
+  you?: boolean
+}
 
 export interface MissionSnapshot {
   protocol: typeof MULTIPLAYER_PROTOCOL
@@ -66,8 +85,17 @@ export interface CrewMessage {
 }
 
 export type ClientMessage =
-  | { type: 'create'; protocol: number; resumeToken?: string }
-  | { type: 'join'; protocol: number; roomCode: string; role: MultiplayerRole; resumeToken?: string }
+  | { type: 'create'; protocol: number; playerId?: string; callsign?: string; resumeToken?: string }
+  | {
+      type: 'join'
+      protocol: number
+      roomCode: string
+      role: MultiplayerRole
+      /** This tab's throwaway id. Lets the server recognise a reconnect. */
+      playerId?: string
+      callsign?: string
+      resumeToken?: string
+    }
   | { type: 'snapshot'; snapshot: MissionSnapshot }
   | { type: 'command'; kind: OpsCommandKind; note: string }
   | { type: 'command_ack'; commandId: string; accepted: boolean }
@@ -82,13 +110,19 @@ export type ServerMessage =
       roomCode: string
       role: MultiplayerRole
       clientId: string
+      /** Echoed back so the client can confirm the server understood it. */
+      playerId: string
+      callsign: string
       resumeToken: string
       peerConnected: boolean
+      roster: RosterEntry[]
+      capacity: number
       snapshot: MissionSnapshot | null
       history: CrewMessage[]
       commands: OpsCommand[]
     }
   | { type: 'peer'; role: MultiplayerRole; connected: boolean }
+  | { type: 'roster'; roster: RosterEntry[]; capacity: number }
   | { type: 'snapshot'; snapshot: MissionSnapshot }
   | { type: 'command'; command: OpsCommand }
   | { type: 'command_ack'; commandId: string; accepted: boolean }

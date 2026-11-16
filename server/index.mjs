@@ -3,7 +3,7 @@ import { createServer } from 'node:http'
 import { extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer, WebSocket } from 'ws'
-import { PROTOCOL, ROOM_CODE_RE, RoomRegistry, validateSnapshot } from './rooms.mjs'
+import { PROTOCOL, ROOM_CAPACITY, ROOM_CODE_RE, RoomRegistry, validateSnapshot } from './rooms.mjs'
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const dist = join(root, 'dist')
@@ -121,6 +121,22 @@ function fail(ws, code, message, retryable = false) {
   send(ws, { type: 'error', code, message, retryable })
 }
 
+/**
+ * Tell everyone who is in the room.
+ *
+ * Each client gets its own copy, because each needs its own entry flagged as
+ * `you` — a roster that cannot show you yourself is a list of strangers.
+ */
+function announceRoster(room) {
+  for (const client of room.clients.values()) {
+    send(client.connection, {
+      type: 'roster',
+      roster: registry.occupants(room, client),
+      capacity: ROOM_CAPACITY,
+    })
+  }
+}
+
 function limiter() {
   let tokens = 40
   let updated = Date.now()
@@ -144,17 +160,25 @@ wss.on('connection', (ws) => {
   const join = (message) => {
     if (attached) return fail(ws, 'ALREADY_JOINED', 'This connection already belongs to a mission.')
     if (message.protocol !== PROTOCOL) return fail(ws, 'PROTOCOL_MISMATCH', 'Client and server versions do not match.')
+    // The identity is whatever the browser minted for this tab. It
+    // authorises nothing — it only lets the room tell a reconnect from a
+    // newcomer, which is the difference between "welcome back" and "the
+    // station is already occupied".
+    const identity = { playerId: message.playerId, callsign: message.callsign, resumeToken: message.resumeToken }
     try {
       attached = message.type === 'create'
-        ? registry.create(ws)
-        : registry.join(String(message.roomCode ?? '').toUpperCase(), message.role, ws, message.resumeToken)
+        ? registry.create(ws, identity)
+        : registry.join(String(message.roomCode ?? '').toUpperCase(), message.role, ws, identity)
       const { room, client } = attached
       send(ws, {
         type: 'joined', protocol: PROTOCOL, roomCode: room.code, role: client.role,
-        clientId: client.id, resumeToken: client.token, peerConnected: registry.peerConnected(room, client.role),
+        clientId: client.id, playerId: client.playerId ?? '', callsign: client.callsign,
+        resumeToken: client.token, peerConnected: registry.peerConnected(room, client.role),
+        roster: registry.occupants(room, client), capacity: ROOM_CAPACITY,
         snapshot: room.snapshot, history: room.history, commands: room.commands,
       })
       broadcast(room, { type: 'peer', role: client.role, connected: true }, client)
+      announceRoster(room)
     } catch (error) {
       fail(ws, error.code ?? 'JOIN_FAILED', error.message ?? 'Unable to join mission.')
     }
@@ -209,6 +233,7 @@ wss.on('connection', (ws) => {
     if (!attached) return
     registry.detach(attached.room, attached.client)
     broadcast(attached.room, { type: 'peer', role: attached.client.role, connected: false })
+    announceRoster(attached.room)
   })
 })
 
