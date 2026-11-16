@@ -5,11 +5,13 @@ import { useStore } from '../state/store'
 import { live } from '../state/live'
 import { renderTier, useSettings } from '../state/settings'
 import { heightAt } from '../mission/terrain'
+import { mastStation } from '../state/useSimLoop'
 import Terrain from './Terrain'
 import FarTerrain from './FarTerrain'
 import Rocks from './Rocks'
 import NearClasts from './NearClasts'
 import Jack from './Jack'
+import Rover from './Rover'
 import Lander from './Lander'
 import Sky from './Sky'
 import MarsEnvironment from './MarsEnvironment'
@@ -49,6 +51,8 @@ export default function SurfaceScene() {
   const jackZ = useStore((s) => s.jackZ)
   const dustFouling = useStore((s) => s.cons.dustFouling)
   const cachesUsed = useStore((s) => s.cachesUsed)
+  const stormFromDeg = useStore((s) => s.stormFromDeg)
+  const mastAt = useMemo(() => mastStation(nearStation), [nearStation])
 
   const sunDir = useMemo(
     () => sunVector(clock.sunAzimuthDeg, clock.sunElevationDeg),
@@ -149,6 +153,16 @@ export default function SurfaceScene() {
       {flag && <FlagMesh code={flag.code} x={flag.x} z={flag.z} />}
 
       <Jack dust={dustFouling} lampsOn={lampsOn} hidden={live.firstPerson} />
+
+      {/* MERV keeps station off Jack's left shoulder in every mode, including
+          first person — where he is the only thing on screen that proves
+          somebody else is out here. */}
+      <Rover
+        dust={dustFouling}
+        lampsOn={lampsOn}
+        stationPos={mastAt}
+        stormFromDeg={stormFromDeg}
+      />
 
       <DustField
         intensity={Math.max(0.04, Math.min(1, Math.pow(env.dustOpticalDepth / 3.0, 0.8)))}
