@@ -26,7 +26,7 @@ export default class ErrorBoundary extends Component<
     if (!error) return this.props.children
 
     const chunkFailure =
-      /dynamically imported module|Importing a module script failed|ChunkLoadError|Failed to fetch/i
+      /dynamically imported module|Importing a module script failed|ChunkLoadError|Failed to fetch|MIME type|module script|Unexpected token/i
         .test(error.message)
 
     return (
@@ -38,7 +38,7 @@ export default class ErrorBoundary extends Component<
           <div className="panel-body stack gap12">
             <p style={{ fontSize: 14 }}>
               {chunkFailure
-                ? 'A piece of the app failed to download. That is almost always a network blip rather than a fault in the mission — the simulation itself runs entirely in your browser once it has loaded.'
+                ? 'A JavaScript chunk did not load. This can happen when an old tab requests a chunk removed by a newer deployment. Reload the app to fetch a matching set of files.'
                 : 'An unexpected error stopped the screen from rendering. Your mission state is still in memory, so reloading will take you back to the title screen rather than resuming.'}
             </p>
             <pre
