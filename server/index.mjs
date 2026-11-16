@@ -1,0 +1,249 @@
+import { createReadStream, existsSync, statSync } from 'node:fs'
+import { createServer } from 'node:http'
+import { extname, join, normalize, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { WebSocketServer, WebSocket } from 'ws'
+import { PROTOCOL, ROOM_CODE_RE, RoomRegistry, validateSnapshot } from './rooms.mjs'
+
+const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
+const dist = join(root, 'dist')
+const port = Number(process.env.PORT) || 10000
+const registry = new RoomRegistry()
+const allowedOrigins = new Set((process.env.ALLOWED_ORIGINS ?? 'https://rohit-ats.github.io')
+  .split(',').map((value) => value.trim()).filter(Boolean))
+const tokenGrants = new Map()
+
+const MIME = {
+  '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.woff2': 'font/woff2', '.wav': 'audio/wav', '.mp3': 'audio/mpeg',
+}
+
+const securityHeaders = {
+  'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://trek.nasa.gov https://flagcdn.com; connect-src 'self' https://api.deepgram.com wss:; media-src 'self'; manifest-src 'self'",
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), geolocation=(), microphone=(self), payment=(), usb=()',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+}
+
+function json(res, status, body) {
+  res.writeHead(status, { ...securityHeaders, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+  res.end(JSON.stringify(body))
+}
+
+async function deepgramToken(req, res) {
+  if (req.method !== 'POST') return json(res, 405, { error: 'POST only' })
+  if (!originAllowed(req.headers.origin, req.headers.host)) return json(res, 403, { error: 'Origin is not allowed' })
+  const address = req.socket.remoteAddress ?? 'unknown'
+  const now = Date.now()
+  const grants = (tokenGrants.get(address) ?? []).filter((time) => now - time < 60_000)
+  if (grants.length >= 10) return json(res, 429, { error: 'Token grant rate limit exceeded' })
+  grants.push(now)
+  tokenGrants.set(address, grants)
+  const key = process.env.DEEPGRAM_API_KEY
+  if (!key) return json(res, 503, { error: 'DEEPGRAM_API_KEY is not configured on the server' })
+  try {
+    const response = await fetch('https://api.deepgram.com/v1/auth/grant', {
+      method: 'POST',
+      headers: { Authorization: `Token ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ttl_seconds: 60 }),
+    })
+    if (!response.ok) return json(res, 502, { error: 'token grant refused by Deepgram' })
+    const body = await response.json()
+    if (!body.access_token) return json(res, 502, { error: 'token grant returned no access_token' })
+    return json(res, 200, { access_token: body.access_token, expires_in: body.expires_in ?? 60 })
+  } catch (error) {
+    console.error('deepgram grant error', error)
+    return json(res, 502, { error: 'token grant failed' })
+  }
+}
+
+function staticResponse(req, res) {
+  const requestPath = new URL(req.url ?? '/', 'http://localhost').pathname
+  let relative
+  try { relative = requestPath === '/' ? 'index.html' : decodeURIComponent(requestPath).replace(/^\/+/, '') }
+  catch { return json(res, 400, { error: 'Malformed URL path' }) }
+  relative = normalize(relative)
+  let file = resolve(dist, relative)
+  if (!file.startsWith(`${dist}/`) || !existsSync(file) || !statSync(file).isFile()) file = join(dist, 'index.html')
+  if (!existsSync(file)) return json(res, 503, { error: 'Frontend build is missing. Run npm run build before starting.' })
+  const immutable = file.includes(`${join(dist, 'assets')}/`)
+  res.writeHead(200, {
+    ...securityHeaders,
+    'Content-Type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream',
+    'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
+  })
+  if (req.method === 'HEAD') return res.end()
+  createReadStream(file).pipe(res)
+}
+
+const server = createServer(async (req, res) => {
+  const path = new URL(req.url ?? '/', 'http://localhost').pathname
+  if (path === '/health') return json(res, 200, { ok: true, protocol: PROTOCOL, rooms: registry.rooms.size })
+  if (path === '/api/deepgram-token') return deepgramToken(req, res)
+  if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'Method not allowed' })
+  return staticResponse(req, res)
+})
+
+const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 })
+
+function originAllowed(origin, requestHost) {
+  if (!origin) return false
+  if (allowedOrigins.has(origin)) return true
+  try {
+    const url = new URL(origin)
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return true
+    return url.hostname.endsWith('.onrender.com') && url.host === requestHost
+  } catch { return false }
+}
+
+server.on('upgrade', (req, socket, head) => {
+  const path = new URL(req.url ?? '/', 'http://localhost').pathname
+  if (path !== '/ws' || !originAllowed(req.headers.origin, req.headers.host)) {
+    socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
+    socket.destroy()
+    return
+  }
+  wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req))
+})
+
+function send(ws, message) {
+  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message))
+}
+
+function broadcast(room, message, except = null) {
+  for (const client of room.clients.values()) if (client !== except) send(client.connection, message)
+}
+
+function fail(ws, code, message, retryable = false) {
+  send(ws, { type: 'error', code, message, retryable })
+}
+
+function limiter() {
+  let tokens = 40
+  let updated = Date.now()
+  return () => {
+    const now = Date.now()
+    tokens = Math.min(40, tokens + (now - updated) * 0.02)
+    updated = now
+    if (tokens < 1) return false
+    tokens -= 1
+    return true
+  }
+}
+
+wss.on('connection', (ws) => {
+  ws.isAlive = true
+  ws.on('pong', () => { ws.isAlive = true })
+  const allowMessage = limiter()
+  let attached = null
+  let lastSnapshotAt = 0
+
+  const join = (message) => {
+    if (attached) return fail(ws, 'ALREADY_JOINED', 'This connection already belongs to a mission.')
+    if (message.protocol !== PROTOCOL) return fail(ws, 'PROTOCOL_MISMATCH', 'Client and server versions do not match.')
+    try {
+      attached = message.type === 'create'
+        ? registry.create(ws)
+        : registry.join(String(message.roomCode ?? '').toUpperCase(), message.role, ws, message.resumeToken)
+      const { room, client } = attached
+      send(ws, {
+        type: 'joined', protocol: PROTOCOL, roomCode: room.code, role: client.role,
+        clientId: client.id, resumeToken: client.token, peerConnected: registry.peerConnected(room, client.role),
+        snapshot: room.snapshot, history: room.history, commands: room.commands,
+      })
+      broadcast(room, { type: 'peer', role: client.role, connected: true }, client)
+    } catch (error) {
+      fail(ws, error.code ?? 'JOIN_FAILED', error.message ?? 'Unable to join mission.')
+    }
+  }
+
+  ws.on('message', (data, isBinary) => {
+    if (isBinary || !allowMessage()) return fail(ws, 'RATE_LIMIT', 'Too many messages.', true)
+    let message
+    try { message = JSON.parse(data.toString()) } catch { return fail(ws, 'BAD_JSON', 'Message is not valid JSON.') }
+    if (!message || typeof message.type !== 'string') return fail(ws, 'BAD_MESSAGE', 'Message type is missing.')
+    if (message.type === 'create' || message.type === 'join') return join(message)
+    if (message.type === 'ping') return send(ws, { type: 'pong', at: Number(message.at) || Date.now() })
+    if (!attached) return fail(ws, 'NOT_JOINED', 'Join a mission before sending data.')
+    const { room, client } = attached
+
+    if (message.type === 'snapshot') {
+      if (client.role !== 'ev') return fail(ws, 'FORBIDDEN', 'Only EV-1 can publish mission telemetry.')
+      const now = Date.now()
+      if (now - lastSnapshotAt < 150) return
+      lastSnapshotAt = now
+      const snapshot = validateSnapshot(message.snapshot)
+      if (!snapshot) return fail(ws, 'BAD_SNAPSHOT', 'Telemetry snapshot was rejected.')
+      room.snapshot = snapshot
+      broadcast(room, { type: 'snapshot', snapshot }, client)
+      return
+    }
+    if (message.type === 'command') {
+      if (client.role !== 'habcom') return fail(ws, 'FORBIDDEN', 'Only HABCOM can issue operational recommendations.')
+      const command = registry.addCommand(room, message.kind, message.note)
+      if (!command) return fail(ws, 'BAD_COMMAND', 'Unknown operational recommendation.')
+      broadcast(room, { type: 'command', command })
+      return
+    }
+    if (message.type === 'command_ack') {
+      if (client.role !== 'ev') return fail(ws, 'FORBIDDEN', 'Only EV-1 can acknowledge a recommendation.')
+      const command = registry.acknowledge(room, String(message.commandId ?? ''), !!message.accepted)
+      if (!command) return fail(ws, 'COMMAND_CLOSED', 'Recommendation is missing or already closed.')
+      broadcast(room, { type: 'command_ack', commandId: command.id, accepted: command.status === 'accepted' })
+      return
+    }
+    if (message.type === 'chat') {
+      const chat = registry.addChat(room, client.role, message.text)
+      if (!chat) return fail(ws, 'BAD_CHAT', 'Message is empty.')
+      broadcast(room, { type: 'chat', message: chat })
+      return
+    }
+    if (message.type === 'leave') ws.close(1000, 'Crew member left')
+    else fail(ws, 'BAD_MESSAGE', 'Unknown message type.')
+  })
+
+  ws.on('close', () => {
+    if (!attached) return
+    registry.detach(attached.room, attached.client)
+    broadcast(attached.room, { type: 'peer', role: attached.client.role, connected: false })
+  })
+})
+
+const heartbeat = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (!ws.isAlive) { ws.terminate(); continue }
+    ws.isAlive = false
+    ws.ping()
+  }
+  registry.sweep()
+  const cutoff = Date.now() - 60_000
+  for (const [address, grants] of tokenGrants) {
+    const recent = grants.filter((time) => time >= cutoff)
+    if (recent.length) tokenGrants.set(address, recent)
+    else tokenGrants.delete(address)
+  }
+}, 25_000)
+heartbeat.unref()
+
+server.listen(port, '0.0.0.0', () => {
+  console.log(`Crimson Exodus multiplayer listening on 0.0.0.0:${port}`)
+})
+
+// Render replaces instances during deploys. Tell connected clients to use
+// their reconnect path, stop accepting new work, and never hold shutdown open
+// past Render's grace window.
+let shuttingDown = false
+function shutdown(signal) {
+  if (shuttingDown) return
+  shuttingDown = true
+  console.log(`${signal} received; draining multiplayer connections`)
+  clearInterval(heartbeat)
+  for (const ws of wss.clients) ws.close(1012, 'Service restarting')
+  server.close(() => process.exit(0))
+  setTimeout(() => process.exit(0), 10_000).unref()
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))

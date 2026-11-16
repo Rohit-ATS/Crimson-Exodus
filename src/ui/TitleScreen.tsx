@@ -8,6 +8,7 @@ import { formatDelay } from '../sim/comms'
 import { GALLERY } from '../data/nasaGallery'
 import SurvivalGuide from './panels/SurvivalGuide'
 import RoverPanel from './panels/RoverPanel'
+import MultiplayerLobby from '../multiplayer/MultiplayerLobby'
 
 /** Four frames that say, without a word, what this is built on. */
 const PROOF = ['abrasionPatches', 'watsonDourbes', 'coreInDrill', 'deltaPano'] as const
@@ -18,6 +19,7 @@ export default function TitleScreen() {
   const quickDemo = useStore((s) => s.quickDemo)
   const [showGuide, setShowGuide] = useState(false)
   const [showRover, setShowRover] = useState(false)
+  const [showMultiplayer, setShowMultiplayer] = useState(false)
   const [, bump] = useState(0)
   const [showControls, setShowControls] = useState(false)
 
@@ -34,7 +36,7 @@ export default function TitleScreen() {
 
       // A dialog owns the keyboard while it is up. Without this, Enter starts
       // the mission behind an open survival guide.
-      if (showGuide || showRover) return
+      if (showGuide || showRover || showMultiplayer) return
 
       if (event.code === 'Enter' || event.code === 'NumpadEnter') {
         event.preventDefault()
@@ -46,7 +48,7 @@ export default function TitleScreen() {
     }
     window.addEventListener('keydown', handleShortcut)
     return () => window.removeEventListener('keydown', handleShortcut)
-  }, [startBriefing, showGuide, showRover])
+  }, [startBriefing, showGuide, showRover, showMultiplayer])
 
   const now = new Date()
   const link = linkGeometry(now)
@@ -213,6 +215,9 @@ export default function TitleScreen() {
             >
               Talk to MERV [J]
             </button>
+            <button className="btn ghost" style={{ padding: '15px 22px' }} onClick={() => setShowMultiplayer(true)}>
+              Multiplayer crew link
+            </button>
             <button className="btn ghost" style={{ padding: '15px 22px' }} onClick={() => setShowControls((v) => !v)}>
               {showControls ? 'Hide controls' : 'Controls & mission rules [?]'}
             </button>
@@ -318,6 +323,7 @@ export default function TitleScreen() {
 
       {showGuide && <SurvivalGuide onClose={() => setShowGuide(false)} />}
       {showRover && <RoverPanel onClose={() => setShowRover(false)} />}
+      {showMultiplayer && <MultiplayerLobby onClose={() => setShowMultiplayer(false)} />}
     </div>
   )
 }
