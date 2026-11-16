@@ -41,16 +41,30 @@ describe('deployment security policy', () => {
     ]) assert.ok(netlify.includes(name), name)
     for (const directive of requiredDirectives) assert.ok(netlify.includes(directive), directive)
   })
+
+  it('ships a paid Render WebSocket service with health checks', () => {
+    const blueprint = readFileSync('render.yaml', 'utf8')
+    for (const expected of [
+      'type: web', 'runtime: node', 'plan: 0.5c-512mb',
+      'numInstances: 1', 'healthCheckPath: /health',
+      'startCommand: npm run multiplayer:start',
+    ]) assert.ok(blueprint.includes(expected), expected)
+    const server = readFileSync('server/index.mjs', 'utf8')
+    for (const expected of ['WebSocketServer', 'maxPayload', 'originAllowed', 'RATE_LIMIT']) {
+      assert.ok(server.includes(expected), expected)
+    }
+  })
 })
 
 describe('GitHub Pages workflow', () => {
   const workflow = readFileSync('.github/workflows/deploy-pages.yml', 'utf8')
 
   it('validates the project before publishing dist', () => {
-    for (const command of ['npm ci', 'npm test', 'npm run typecheck', 'npm run build']) {
+    for (const command of ['npm ci', 'npm test', 'npm run typecheck', 'npm run build', 'npm run test:render']) {
       assert.ok(workflow.includes(`run: ${command}`), command)
     }
     assert.match(workflow, /path: dist/)
+    assert.match(workflow, /VITE_MULTIPLAYER_URL: \$\{\{ vars\.VITE_MULTIPLAYER_URL \}\}/)
   })
 
   it('uses the official Pages artifact and deployment flow', () => {

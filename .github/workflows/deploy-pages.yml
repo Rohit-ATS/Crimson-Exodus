@@ -38,6 +38,13 @@ jobs:
 
       - name: Build production site
         run: npm run build
+        env:
+          # Repository Settings → Secrets and variables → Actions → Variables.
+          # Example: wss://crimson-exodus.onrender.com/ws
+          VITE_MULTIPLAYER_URL: ${{ vars.VITE_MULTIPLAYER_URL }}
+
+      - name: Smoke-test Render production server
+        run: npm run test:render
 
       - name: Disable Jekyll processing
         run: touch dist/.nojekyll

@@ -47,11 +47,13 @@ controls and mission rules. The title screen scrolls on short and narrow
 displays, keyboard focus is outlined, and system reduced-motion preferences are
 respected.
 
-It is a static site — the `dist/` folder deploys to Vercel, Netlify, GitHub Pages
-or any static host with no server, no API keys and no build-time secrets. That
-includes MERV, the rover companion: he answers, cites his sources and speaks
-aloud with nothing configured. A Deepgram key is an optional upgrade to his
-voice, never a requirement — see [MERV, the rover companion](#merv-the-rover-companion).
+Single-player remains a static site — the `dist/` folder deploys to Vercel,
+Netlify, GitHub Pages or any static host with no server, no API keys and no
+build-time secrets. That includes MERV, the rover companion: he answers, cites
+his sources and speaks aloud with nothing configured. Multiplayer is an optional
+Render WebSocket service; the game falls back to the complete local mission when
+it is absent. A Deepgram key is an optional upgrade to MERV's voice, never a
+requirement — see [MERV, the rover companion](#merv-the-rover-companion).
 
 ### Deploy
 
@@ -60,15 +62,55 @@ configuration: point it at the repo and it builds. For GitHub Pages, run
 `npm run build` and publish `dist/` — `vite.config.ts` sets `base: './'` so the
 app works from a subpath as well as a domain root.
 
-The only runtime network calls are to `trek.nasa.gov` (basemap and HiRISE/CTX tiles),
+The single-player runtime network calls are to `trek.nasa.gov` (basemap and HiRISE/CTX tiles),
 `flagcdn.com` (flag images) and Google Fonts. All three fail gracefully: the map
 falls back to a clearly labelled schematic, flags fall back to a drawn
 placeholder, and the fonts fall back to system stacks. The simulation itself
-never touches the network.
+remains local unless the player explicitly creates or joins a multiplayer room.
 
 One more is *optional*: if you configure Deepgram, MERV's speech recognition and
 synthesis go to `api.deepgram.com`. Configure nothing and he still talks — see
 [MERV, the rover companion](#merv-the-rover-companion) below.
+
+### Multiplayer on Render
+
+Multiplayer is deliberately asymmetric. **EV-1** runs the unchanged 3D mission;
+**HABCOM** opens the same URL on a phone, tablet or second computer and receives a
+small, whitelisted telemetry snapshot four times per second. HABCOM can send crew
+messages and `GO`, `HOLD` or `RETURN` recommendations. The latter two never seize
+the suit controls: EV-1 must acknowledge them before they pause the mission or
+start the return traverse.
+
+`render.yaml` provisions one paid Node Web Service that builds and serves `dist/`,
+accepts the crew link on `/ws`, exposes `/health`, and optionally mints 60-second
+Deepgram tokens at `/api/deepgram-token`. Connect a Render Blueprint to this
+repository. `DEEPGRAM_API_KEY` is optional; add it manually in the Render
+dashboard to upgrade MERV's voice, or omit it to keep the local voice tier.
+
+Room state is intentionally short-lived and held by the single service instance:
+empty rooms expire after 30 minutes, and a service deploy ends active sessions.
+That keeps the two-player mission independent of a database and avoids retaining
+player telemetry after the session.
+
+The Render-hosted frontend discovers its own secure WebSocket endpoint. To make
+the existing GitHub Pages deployment use the same service:
+
+1. Deploy the Render Blueprint and copy its `https://…onrender.com` URL.
+2. Change the scheme to `wss://` and append `/ws`.
+3. In GitHub, open **Settings → Secrets and variables → Actions → Variables**.
+4. Add `VITE_MULTIPLAYER_URL=wss://your-service.onrender.com/ws`.
+5. Re-run **Deploy GitHub Pages** or push a commit.
+
+The endpoint is public configuration, not a secret. WebSocket handshakes accept
+the current Render origin, local development and `https://rohit-ats.github.io`.
+Add custom site origins to the server-side `ALLOWED_ORIGINS` variable.
+
+Local production test:
+
+```bash
+npm run build
+PORT=10000 ALLOWED_ORIGINS=http://localhost:10000 npm start
+```
 
 ### Controls
 
@@ -549,6 +591,11 @@ src/
     voice.ts         Three voice tiers, credential handling, Deepgram clients
     agentPrompt.ts   Persona, live-telemetry block and the functions the hosted
                      model may call back into the simulation with
+  multiplayer/
+    protocol.ts      Versioned, deliberately small wire contract
+    client.ts        WebSocket lifecycle, reconnect, heartbeat and room state
+    bridge.tsx       Whitelisted sim snapshot and EV-1 recommendations
+    MissionControl.tsx  responsive HABCOM telemetry console
   three/             Terrain, far horizon, sky, rocks, Jack, MERV, lander, flag, dust
                      MarsEnvironment.tsx  image-based lighting from the Mars sky
                      NearClasts.tsx       camera-following ground litter
@@ -571,6 +618,8 @@ public/rover-mic-worklet.js  microphone capture, served from our own origin beca
                      `script-src 'self'` governs AudioWorklet modules
 api/, netlify/       optional serverless functions that mint 60-second Deepgram
                      tokens from a server-side secret
+server/              Render HTTP/WebSocket service, room registry, validation,
+                     rate limits, origin checks and static SPA hosting
   data/              ISO 3166-1 flags, flag textures, nasaGallery.ts (bundled NASA
                      imagery with credits), realSite.ts (HiRISE DTM loader,
                      Trek tiles, CRISM projection, Perseverance traverse and images)

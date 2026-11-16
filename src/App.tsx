@@ -11,10 +11,13 @@ const Planning = lazy(() => import('./ui/Planning'))
 const Surface = lazy(() => import('./ui/Surface'))
 const Debrief = lazy(() => import('./ui/Debrief'))
 const RoverPanel = lazy(() => import('./ui/panels/RoverPanel'))
+const MissionControl = lazy(() => import('./multiplayer/MissionControl'))
 import DataPanel from './ui/panels/DataPanel'
 import { openDataPanel } from './ui/dataPanelBus'
 import ErrorBoundary from './ui/ErrorBoundary'
 import Coach from './ui/Coach'
+import MultiplayerBridge, { CrewLinkStatus, OpsAdvisory } from './multiplayer/bridge'
+import { useMultiplayer } from './multiplayer/client'
 
 /**
  * A short wipe between phases. It hides the frame where a screen mounts and the
@@ -74,6 +77,8 @@ function Booting({ phase }: { phase: string }) {
 export default function App() {
   const phase = useStore((s) => s.phase)
   const reducedMotion = useSettings((s) => s.reducedMotion)
+  const multiplayerRole = useMultiplayer((s) => s.role)
+  const multiplayerStatus = useMultiplayer((s) => s.status)
 
   // Reduced motion is a document-level switch so it reaches every screen,
   // including the ones rendered through portals and lazy chunks.
@@ -106,8 +111,17 @@ export default function App() {
     return () => window.removeEventListener('keydown', h)
   }, [phase])
 
+  if (multiplayerRole === 'habcom' && (multiplayerStatus === 'connected' || multiplayerStatus === 'reconnecting')) {
+    return (
+      <Suspense fallback={<div className="screen center grid-bg"><span className="display cy">OPENING HABCOM CONSOLE</span></div>}>
+        <MissionControl />
+      </Suspense>
+    )
+  }
+
   return (
     <>
+      <MultiplayerBridge />
       {phase === 'title' && <TitleScreen />}
       {phase === 'briefing' && <Briefing />}
       <ErrorBoundary
@@ -134,6 +148,8 @@ export default function App() {
       )}
 
       <PhaseTransition phase={phase} />
+      <OpsAdvisory />
+      <CrewLinkStatus />
     </>
   )
 }

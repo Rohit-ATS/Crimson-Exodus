@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: crimson-exodus
+    runtime: node
+    plan: 0.5c-512mb
+    region: oregon
+    numInstances: 1
+    buildCommand: npm ci && npm run verify
+    startCommand: npm run multiplayer:start
+    healthCheckPath: /health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_VERSION
+        value: 22.14.0
+      - key: ALLOWED_ORIGINS
+        value: https://rohit-ats.github.io
+      - key: VITE_ROVER_MODE
+        value: auto
+      - key: VITE_DEEPGRAM_TOKEN_URL
+        value: /api/deepgram-token
