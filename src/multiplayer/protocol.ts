@@ -156,24 +156,124 @@ export function sameConnectionIntent(current: ConnectionIntent | null, next: Con
     && current.resumeToken === next.resumeToken
 }
 
-export function multiplayerEndpoint(envValue: string | undefined, location: Location): string | null {
+/**
+ * Why the crew link has no endpoint, in words a person can act on.
+ *
+ * The previous version returned `null` for three completely different
+ * problems and the UI printed the same sentence for all of them: "set
+ * VITE_MULTIPLAYER_URL". That sentence is wrong advice for two of the three,
+ * and it was shown to somebody running on Render — where the variable should
+ * not be needed at all — with no hint that their configured value had been
+ * parsed and rejected.
+ */
+export type EndpointFailure =
+  | { reason: 'unset'; message: string }
+  | { reason: 'not-a-websocket-url'; configured: string; message: string }
+  | { reason: 'unparseable'; configured: string; message: string }
+
+export type EndpointResolution =
+  | { url: string; source: 'configured' | 'same-origin' }
+  | EndpointFailure
+
+/** Literal accepted by VITE_MULTIPLAYER_URL for a host that serves both. */
+export const SAME_ORIGIN = 'same-origin'
+
+/**
+ * The marker the multiplayer server stamps into the `index.html` it serves.
+ *
+ * A browser cannot tell whether the site it loaded from has a WebSocket
+ * server behind it, and the hostname is a poor proxy: a custom domain in
+ * front of the real server looks like a static host, and guessing wrong
+ * refuses a socket that exists. The server knows, so the server says.
+ */
+export const CREW_LINK_META = 'crew-link'
+
+/** Minimal shape of the document, so this stays testable without a browser. */
+export interface MetaSource {
+  querySelector(selectors: string): { getAttribute(name: string): string | null } | null
+}
+
+function markedPath(doc: MetaSource | null | undefined): string | null {
+  if (!doc) return null
+  try {
+    const path = doc.querySelector(`meta[name="${CREW_LINK_META}"]`)?.getAttribute('content')
+    // An absolute path on THIS origin, and nothing else. A scheme-relative
+    // "//elsewhere/ws" also begins with a slash and would point the crew link
+    // at another host entirely, so it is rejected explicitly.
+    if (!path || !path.startsWith('/') || path.startsWith('//')) return null
+    return path
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Work out where the crew link lives, and say why when it cannot.
+ *
+ * Order: an explicit setting wins; otherwise a host known to serve the socket
+ * from the same origin discovers itself. A static host with no backend —
+ * GitHub Pages — must be told, because silently dialling a socket that cannot
+ * exist produces a worse error than refusing to try.
+ */
+export function resolveMultiplayerEndpoint(
+  envValue: string | undefined,
+  location: Pick<Location, 'protocol' | 'hostname' | 'host'>,
+  doc?: MetaSource | null,
+): EndpointResolution {
+  const sameOrigin = (path = '/ws') =>
+    `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}${path}`
+
   const configured = envValue?.trim()
   if (configured) {
+    if (configured === SAME_ORIGIN) return { url: sameOrigin(), source: 'same-origin' }
+    let url: URL
     try {
-      const url = new URL(configured)
-      if (url.protocol !== 'ws:' && url.protocol !== 'wss:') return null
-      return url.toString()
+      url = new URL(configured)
     } catch {
-      return null
+      return {
+        reason: 'unparseable',
+        configured,
+        message: `VITE_MULTIPLAYER_URL is set to "${configured}", which is not a URL. It must look like wss://your-service.onrender.com/ws — or the word "${SAME_ORIGIN}" if this site and the socket are served by the same service.`,
+      }
     }
+    if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
+      return {
+        reason: 'not-a-websocket-url',
+        configured,
+        message: `VITE_MULTIPLAYER_URL is set to "${configured}", but a crew link needs a WebSocket URL. Change ${url.protocol}// to ${url.protocol === 'http:' ? 'ws://' : 'wss://'} and make sure the path ends in /ws.`,
+      }
+    }
+    return { url: url.toString(), source: 'configured' }
   }
 
-  // Render serves the static build and socket from the same paid Web Service.
-  // Local development gets the same zero-configuration behaviour. GitHub Pages
-  // must provide VITE_MULTIPLAYER_URL because it has no backend of its own.
-  if (location.hostname.endsWith('.onrender.com') || location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-    return `${protocol}//${location.host}/ws`
+  // The server that served this page says it has a socket. True for Render,
+  // for a custom domain in front of it, and for anywhere else running
+  // server/index.mjs — without anybody having to configure a thing.
+  const marked = markedPath(doc)
+  if (marked) return { url: sameOrigin(marked), source: 'same-origin' }
+
+  // Fallbacks by name, for a build served by something other than our own
+  // server: Render's own domain, and local development.
+  if (
+    location.hostname.endsWith('.onrender.com')
+    || location.hostname === 'localhost'
+    || location.hostname === '127.0.0.1'
+  ) {
+    return { url: sameOrigin(), source: 'same-origin' }
   }
-  return null
+
+  return {
+    reason: 'unset',
+    message: `This site (${location.host}) has no multiplayer server of its own, and VITE_MULTIPLAYER_URL was not set when it was built. Rebuild with VITE_MULTIPLAYER_URL=wss://your-service.onrender.com/ws, or with "${SAME_ORIGIN}" if the same service also serves the socket. It is a build-time variable: setting it in a dashboard without rebuilding changes nothing.`,
+  }
+}
+
+/** The endpoint, or null. Kept for callers that only need the URL. */
+export function multiplayerEndpoint(
+  envValue: string | undefined,
+  location: Location,
+  doc?: MetaSource | null,
+): string | null {
+  const resolved = resolveMultiplayerEndpoint(envValue, location, doc)
+  return 'url' in resolved ? resolved.url : null
 }

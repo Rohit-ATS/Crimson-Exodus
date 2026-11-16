@@ -1,16 +1,16 @@
-import { createReadStream, existsSync, statSync } from 'node:fs'
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer, WebSocket } from 'ws'
 import { PROTOCOL, ROOM_CAPACITY, ROOM_CODE_RE, RoomRegistry, validatePose, validateSnapshot } from './rooms.mjs'
+import { originAllowed as checkOrigin, parseAllowedOrigins } from './origin.mjs'
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const dist = join(root, 'dist')
 const port = Number(process.env.PORT) || 10000
 const registry = new RoomRegistry()
-const allowedOrigins = new Set((process.env.ALLOWED_ORIGINS ?? 'https://rohit-ats.github.io')
-  .split(',').map((value) => value.trim()).filter(Boolean))
+const allowedOrigins = parseAllowedOrigins(process.env.ALLOWED_ORIGINS)
 const tokenGrants = new Map()
 
 const MIME = {
@@ -84,11 +84,35 @@ function staticResponse(req, res) {
   }
   if (!existsSync(file)) return json(res, 503, { error: 'Frontend build is missing. Run npm run build before starting.' })
   const immutable = file.includes(`${join(dist, 'assets')}/`)
-  res.writeHead(200, {
+  const headers = {
     ...securityHeaders,
     'Content-Type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream',
     'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
-  })
+  }
+
+  /**
+   * Tell the page that this host has a crew link.
+   *
+   * A browser cannot work out by itself whether the site it loaded from has a
+   * WebSocket server behind it. Guessing wrong is bad in both directions: a
+   * static host would dial a socket that cannot exist, and a custom domain in
+   * front of a real server would refuse to dial one that does.
+   *
+   * So the server says. Only this process serves this marker, and only this
+   * process has the socket — GitHub Pages serves the same `index.html` from
+   * the repository build and stamps nothing, so it still correctly reports
+   * that it needs to be told where the server is.
+   */
+  if (file.endsWith('index.html')) {
+    const html = readFileSync(file, 'utf8')
+      .replace('</head>', `<meta name="crew-link" content="/ws">\n  </head>`)
+    const body = Buffer.from(html, 'utf8')
+    res.writeHead(200, { ...headers, 'Content-Length': body.byteLength })
+    if (req.method === 'HEAD') return res.end()
+    return res.end(body)
+  }
+
+  res.writeHead(200, headers)
   if (req.method === 'HEAD') return res.end()
   createReadStream(file).pipe(res)
 }
@@ -103,14 +127,9 @@ const server = createServer(async (req, res) => {
 
 const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 })
 
+/** See server/origin.mjs — same-origin always, plus the ALLOWED_ORIGINS list. */
 function originAllowed(origin, requestHost) {
-  if (!origin) return false
-  if (allowedOrigins.has(origin)) return true
-  try {
-    const url = new URL(origin)
-    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return true
-    return url.hostname.endsWith('.onrender.com') && url.host === requestHost
-  } catch { return false }
+  return checkOrigin(origin, requestHost, allowedOrigins)
 }
 
 server.on('upgrade', (req, socket, head) => {

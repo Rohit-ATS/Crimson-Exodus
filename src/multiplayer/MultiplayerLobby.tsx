@@ -121,10 +121,15 @@ export default function MultiplayerLobby({ onClose }: { onClose: () => void }) {
 
         {multiplayer.error && <div className="note danger">{multiplayer.error}</div>}
         {multiplayer.status === 'unavailable' && (
-          <div className="src">
-            On GitHub Pages, set the repository Actions variable VITE_MULTIPLAYER_URL to your
-            Render endpoint, for example wss://your-service.onrender.com/ws. Render-hosted builds
-            discover their same-origin server automatically.
+          <div className="src" style={{ lineHeight: 1.5 }}>
+            A Render-hosted build finds its own socket with no configuration. If you are seeing
+            this on Render, the usual cause is a custom domain — discovery only recognises
+            <span className="mono"> *.onrender.com</span> — or a VITE_MULTIPLAYER_URL that was set
+            to an <span className="mono">https://</span> address rather than
+            <span className="mono"> wss://</span>. Either case is fixed by rebuilding with
+            <span className="mono"> VITE_MULTIPLAYER_URL=same-origin</span> when one service serves
+            both, or the full <span className="mono">wss://host/ws</span> when they are separate.
+            It is read at build time, so a dashboard change needs a redeploy, not a restart.
           </div>
         )}
       </div>
