@@ -18,7 +18,7 @@ export default class ErrorBoundary extends Component<
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     // Keep it in the console for a developer; the UI explains itself.
-    console.error('JACK: Marswalk — render error', error, info.componentStack)
+    console.error('Crimson Exodus — render error', error, info.componentStack)
   }
 
   render() {

@@ -3,6 +3,7 @@ export interface DebugGlobalTarget {
   __live?: unknown
   __merv?: unknown
   __mp?: unknown
+  __settings?: unknown
 }
 
 interface DebugEnvironment {

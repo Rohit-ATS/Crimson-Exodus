@@ -7,7 +7,7 @@ import App from './App'
 // dynamic import can point at an asset that no longer exists. Refresh once to
 // fetch the matching index.html and chunks; if that still fails, leave the
 // ErrorBoundary visible instead of creating a reload loop.
-const CHUNK_RELOAD_KEY = 'jack-marswalk:chunk-reload-at'
+const CHUNK_RELOAD_KEY = 'crimson-exodus:chunk-reload-at'
 let allowChunkReload = false
 try {
   const previousReload = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY))

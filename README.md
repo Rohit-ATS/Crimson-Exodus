@@ -1,4 +1,4 @@
-# JACK: Marswalk
+# Crimson Exodus
 
 **A playable Mars EVA planning and field-science simulation, built on NASA open data.**
 NASA Space Apps Challenge 2026.
@@ -10,7 +10,7 @@ NASA Space Apps Challenge 2026.
 
 ## The one-sentence pitch
 
-JACK turns NASA Mars data into a playable Marswalk: plan a route, make field
+Crimson Exodus turns NASA Mars data into a playable Marswalk: plan a route, make field
 observations, and get the astronaut back with the science — while Earth is
 eleven light-minutes away and cannot answer in time.
 

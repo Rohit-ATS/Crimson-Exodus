@@ -122,7 +122,7 @@ export default function TitleScreen() {
               textShadow: '0 0 70px rgba(226,96,58,0.45)',
             }}
           >
-            JACK
+            CRIMSON
           </h1>
           <div
             className="display"
@@ -134,7 +134,7 @@ export default function TitleScreen() {
               marginBottom: 18,
             }}
           >
-            MARSWALK
+            EXODUS
           </div>
 
           <p style={{ fontSize: 'clamp(15px, 1.5vw, 19px)', maxWidth: 700, color: '#c3d8e6' }}>
@@ -195,7 +195,7 @@ export default function TitleScreen() {
               style={{ padding: '15px 34px', fontSize: 14, letterSpacing: '0.2em' }}
               onClick={startBriefing}
             >
-              &#9656;&nbsp; Start Marswalk <span className="mono" style={{ fontSize: 10, opacity: 0.75 }}>[Enter]</span>
+              &#9656;&nbsp; Begin the EVA <span className="mono" style={{ fontSize: 10, opacity: 0.75 }}>[Enter]</span>
             </button>
             <button
               className="btn"

@@ -1,4 +1,4 @@
-# JACK: Marswalk — presentation and demo script
+# Crimson Exodus — presentation and demo script
 
 > Written for: the team, to present to Space Apps judges.
 > Check your local event's instructions for the controlling format before you

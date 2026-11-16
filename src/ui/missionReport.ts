@@ -365,7 +365,7 @@ export async function downloadReport(input: ReportInput): Promise<void> {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `jack-marswalk-report-${new Date().toISOString().slice(0, 10)}.png`
+  a.download = `crimson-exodus-report-${new Date().toISOString().slice(0, 10)}.png`
   document.body.appendChild(a)
   a.click()
   a.remove()

@@ -62,7 +62,7 @@ interface WindowActions {
   resetLayout: () => void
 }
 
-const KEY = 'jack-marswalk:hud-windows:v1'
+const KEY = 'crimson-exodus:hud-windows:v1'
 
 function load(): Partial<WindowState> {
   try {

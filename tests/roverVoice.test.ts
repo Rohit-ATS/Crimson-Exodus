@@ -12,7 +12,7 @@ describe('MERV credential handling', () => {
     // deployed site publishes the key to every visitor.
     assert.equal(rawKeyAllowed('localhost', true), true)
     assert.equal(rawKeyAllowed('127.0.0.1', true), true)
-    assert.equal(rawKeyAllowed('jack-marswalk.vercel.app', true), false)
+    assert.equal(rawKeyAllowed('crimson-exodus.vercel.app', true), false)
     assert.equal(rawKeyAllowed('localhost', false), false)
   })
 

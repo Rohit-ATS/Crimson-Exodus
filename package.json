@@ -1,9 +1,9 @@
 {
-  "name": "jack-marswalk",
+  "name": "crimson-exodus",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "JACK: Marswalk - a playable Mars EVA planning and field-science simulation built on NASA open data. NASA Space Apps 2026.",
+  "description": "Crimson Exodus - a playable Mars EVA planning and field-science simulation built on NASA open data. NASA Space Apps 2026.",
   "scripts": {
     "dev": "vite",
     "start": "node server/index.mjs",

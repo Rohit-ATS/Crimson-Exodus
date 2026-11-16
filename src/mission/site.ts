@@ -150,7 +150,7 @@ export const PROVENANCE: Provenance[] = [
     id: 'synthetic-dem',
     label: 'Local height field (synthetic)',
     instrument: 'Procedural, this project',
-    source: 'JACK: Marswalk',
+    source: 'Crimson Exodus',
     date: '2026',
     resolution: 'Continuous function, sampled at 4 m for the mesh',
     url: '',

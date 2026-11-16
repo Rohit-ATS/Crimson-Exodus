@@ -14,6 +14,7 @@
  */
 
 import { create } from 'zustand'
+import { debugGlobalsEnabled, type DebugGlobalTarget } from './debugGlobals'
 
 export type QualityMode = 'auto' | 'high' | 'balanced' | 'performance'
 
@@ -73,7 +74,7 @@ export interface SettingsActions {
   tier: () => QualityTier
 }
 
-const KEY = 'jack-marswalk:settings:v1'
+const KEY = 'crimson-exodus:settings:v1'
 
 function load(): Partial<Settings> {
   try {
@@ -162,3 +163,15 @@ export const useSettings = create<Settings & SettingsActions>((set, get) => ({
  * step by the adaptive controller.
  */
 export const renderTier: { current: QualityTier } = { current: TIERS[1] }
+
+/**
+ * Browser automation can pin the render tier. Opt-in through the same flag
+ * the mission store uses, so an ordinary session publishes nothing.
+ *
+ * Capture tooling needs this: a software renderer produces frame times in the
+ * hundreds of milliseconds, and the adaptive controller would reasonably but
+ * unhelpfully strip the scene back to its performance preset.
+ */
+if (typeof window !== 'undefined' && debugGlobalsEnabled(import.meta.env)) {
+  ;(window as unknown as DebugGlobalTarget).__settings = useSettings
+}
