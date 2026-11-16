@@ -67,7 +67,21 @@ function staticResponse(req, res) {
   catch { return json(res, 400, { error: 'Malformed URL path' }) }
   relative = normalize(relative)
   let file = resolve(dist, relative)
-  if (!file.startsWith(`${dist}/`) || !existsSync(file) || !statSync(file).isFile()) file = join(dist, 'index.html')
+  const missingAsset = /^\/assets(?:\/|$)/.test(requestPath)
+  if (!file.startsWith(`${dist}/`) || !existsSync(file) || !statSync(file).isFile()) {
+    // Do not turn a missing JavaScript/CSS chunk into index.html. Browsers then
+    // reject the response as text/html, and an old tab cannot recover its lazy
+    // screen. Unknown app routes still receive the SPA shell.
+    if (missingAsset) {
+      res.writeHead(404, {
+        ...securityHeaders,
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-store',
+      })
+      return res.end('Asset not found')
+    }
+    file = join(dist, 'index.html')
+  }
   if (!existsSync(file)) return json(res, 503, { error: 'Frontend build is missing. Run npm run build before starting.' })
   const immutable = file.includes(`${join(dist, 'assets')}/`)
   res.writeHead(200, {
