@@ -48,7 +48,10 @@ displays, keyboard focus is outlined, and system reduced-motion preferences are
 respected.
 
 It is a static site — the `dist/` folder deploys to Vercel, Netlify, GitHub Pages
-or any static host with no server, no API keys and no build-time secrets.
+or any static host with no server, no API keys and no build-time secrets. That
+includes MERV, the rover companion: he answers, cites his sources and speaks
+aloud with nothing configured. A Deepgram key is an optional upgrade to his
+voice, never a requirement — see [MERV, the rover companion](#merv-the-rover-companion).
 
 ### Deploy
 
@@ -62,6 +65,10 @@ The only runtime network calls are to `trek.nasa.gov` (basemap and HiRISE/CTX ti
 falls back to a clearly labelled schematic, flags fall back to a drawn
 placeholder, and the fonts fall back to system stacks. The simulation itself
 never touches the network.
+
+One more is *optional*: if you configure Deepgram, MERV's speech recognition and
+synthesis go to `api.deepgram.com`. Configure nothing and he still talks — see
+[MERV, the rover companion](#merv-the-rover-companion) below.
 
 ### Controls
 
@@ -78,6 +85,8 @@ never touches the network.
 | `M` | Mission map |
 | `N` | Real-site map (HiRISE imagery + DTM, CRISM, Perseverance traverse) |
 | `T` | Earth comms feed |
+| `X` (hold) | Hold to talk to MERV, the rover companion |
+| `J` | MERV's transcript — type a question, read the log |
 | `H` | Hazard overlay |
 | `V` | First / third person |
 | `P` | Auto-traverse |
@@ -88,6 +97,97 @@ never touches the network.
 | `R` | Swap consumables at a depot in reach |
 | `Enter` | Ingress at the lander and end the EVA |
 | `Esc` | Close a panel |
+
+---
+
+## MERV, the rover companion
+
+A six-wheeled scout rover keeps station off Jack's left shoulder for the whole
+EVA, in every mode and in first person. You can talk to him.
+
+**He answers two different kinds of question, and the difference matters.**
+
+Ask about *Mars* — the air, the dust, radiation, water, power, navigation,
+getting home — and the answer comes from a hand-written knowledge base in this
+repository. Forty-odd entries, each one a specific number, where it came from,
+and why somebody standing on Mars would care. Every answer carries its citation
+in the transcript.
+
+Ask about *this EVA* — "can I keep going", "how far is home", "is a storm
+coming", "what should I do next", "how much radiation have I taken" — and the
+answer is computed from the running simulation. He will do the walk-back
+arithmetic out loud, name the limiting consumable, and tell you to turn around
+if the margin says so.
+
+And he speaks first. Unprompted advisories fire on the solar particle monitor,
+the reserve margin, a storm front building, the scrubber, visibility loss, and
+his own solar array silting up. Each one is said once, rate-limited against the
+wall clock rather than the mission clock so that time compression does not turn
+a companion into an alarm.
+
+**He is written to refuse rather than estimate.** Ask him something with no
+source behind it and he says he does not know. That is the single most important
+behaviour in the whole subsystem, and it is unit-tested.
+
+### Three tiers, and the default needs no key
+
+| Tier | Speech in | The answer | Speech out |
+|---|---|---|---|
+| `local` *(default)* | browser speech recognition, where available | this repo's sourced knowledge base + live telemetry | the browser's own speech engine, on-device |
+| `grounded` | Deepgram `nova-3` | **still this repo's knowledge base + live telemetry** | Deepgram Aura |
+| `agent` *(opt-in)* | Deepgram | a hosted language model, with the live telemetry injected into its prompt and functions that query the simulation | Deepgram Aura |
+
+With no configuration at all the rover is complete: he answers, cites, warns and
+speaks aloud, and nothing leaves the machine. Adding Deepgram makes him fluent;
+it does not make him informed.
+
+The `agent` tier is never selected automatically, even when a key is present. It
+spends money on every spoken word and hands the microphone to a hosted model, so
+it has to be asked for by name. When it is running, the comms panel says so.
+
+Both the `grounded` and `agent` tiers resolve "can I keep going" through the same
+function the offline tier uses, so the advice cannot change depending on whether
+somebody set a key.
+
+### Configuring it
+
+Copy `.env.example` to `.env.local`. Everything in it is optional.
+
+```bash
+VITE_ROVER_MODE=grounded             # or agent, or local
+VITE_DEEPGRAM_TOKEN_URL=/api/deepgram-token
+```
+
+**A browser cannot keep a secret.** Any variable beginning with `VITE_` is
+compiled into the public JavaScript bundle, so putting a real key in
+`VITE_DEEPGRAM_API_KEY` and deploying it publishes that key to every visitor.
+The app refuses to use that variable unless the page is on `localhost`.
+
+For anything deployed, use the token endpoint. Two implementations ship with
+this repo — `api/deepgram-token.ts` for Vercel and
+`netlify/functions/deepgram-token.mts` for Netlify. Both read a **server-side**
+`DEEPGRAM_API_KEY` (no `VITE_` prefix, so it never reaches the browser) and hand
+the browser a token that expires in sixty seconds.
+
+### What is real about the rover, and what is not
+
+MERV is **not** a real or planned vehicle. Two things about him are faithful:
+
+- **The suspension is a rocker-bogie** — the passive, springless, two-joints-per-side
+  design NASA has used on every Mars rover since Sojourner in 1997 — and it is
+  articulated here the way the real one works. Six independent wheel contacts
+  drive two rocker angles and two bogie angles, so a front wheel can climb a rock
+  while the chassis barely moves.
+- **The power model is a solar array** whose output collapses with dust loading
+  and low sun. That is what ended Opportunity in the 2018 global storm and
+  InSight in 2022, and when MERV's array silts up he tells you so and goes into
+  low-power hold.
+
+One thing is fiction: **the speed.** Perseverance tops out near 0.042 m/s —
+152 metres an hour. MERV moves at walking pace, because a companion that falls
+400 m behind in the first minute is not a companion. It is the single deliberate
+departure in the vehicle, and it is disclosed in the data panel (`K`) alongside
+everything else.
 
 ---
 
@@ -104,10 +204,15 @@ model.*
 Mars, credited on the image, with one thing worth remembering if you were the
 one standing there.*
 
+![MERV speaking first](docs/screenshots/16-merv-unprompted-warning.jpg)
+*MERV, unprompted, doing the walk-back arithmetic out loud while a dust devil
+passes. Nobody asked him. The warning is also written into the mission log, so
+the debrief can show that it was given and when.*
+
 The full set is in [`docs/screenshots/`](docs/screenshots/): title, survival
 guide, briefing, planner, real-site map, traverse, objectives, a procedure
 running and finishing, the downlink to Earth, the NASA feed, a dust storm at
-peak, and the debrief.
+peak, the rover companion and its comms panel, and the debrief.
 
 ---
 
@@ -436,19 +541,36 @@ src/
     activity.ts      Procedures: beats, costs, NASA imagery, survival lessons
     objectives.ts    The mission, in three tiers, derived from state
     coaching.ts      Contextual guidance, chosen from mission state
-  three/             Terrain, far horizon, sky, rocks, Jack, lander, flag, dust, scene
+  ai/
+    knowledge.ts     MERV's offline brain: 40+ hand-written, individually sourced
+                     Mars answers. No network, no model, no key.
+    brain.ts         Situational reasoning over a live telemetry snapshot, plus
+                     the unprompted advisories and their trigger thresholds
+    voice.ts         Three voice tiers, credential handling, Deepgram clients
+    agentPrompt.ts   Persona, live-telemetry block and the functions the hosted
+                     model may call back into the simulation with
+  three/             Terrain, far horizon, sky, rocks, Jack, MERV, lander, flag, dust
                      MarsEnvironment.tsx  image-based lighting from the Mars sky
                      NearClasts.tsx       camera-following ground litter
                      AdaptiveQuality.tsx  measures frame time, picks a tier
+                     Rover.tsx            MERV: rocker-bogie articulation, steering,
+                                          mast that looks at what it is talking about
   ui/                Title, briefing, planner, HUD, panels, debrief
                      ProcedureOverlay.tsx  animated procedures and result cards
                      UplinkOverlay.tsx     the downlink to Earth
                      Coach.tsx             one guidance card at a time
                      missionReport.ts      the shareable card, drawn on canvas
                      panels/SurvivalGuide.tsx  the full guide, no play required
+                     panels/RoverPanel.tsx     MERV's transcript, mic and wiring
+                     RoverDock.tsx             MERV on the HUD, out of the way
     map/             Local raster layers, NASA Trek tiles, elevation profile
   state/             Zustand store, fixed-step sim loop, input
                      settings.ts  quality, accessibility, persisted preferences
+                     merv.ts      the rover's transcript, mic, speech queue and tier
+public/rover-mic-worklet.js  microphone capture, served from our own origin because
+                     `script-src 'self'` governs AudioWorklet modules
+api/, netlify/       optional serverless functions that mint 60-second Deepgram
+                     tokens from a server-side secret
   data/              ISO 3166-1 flags, flag textures, nasaGallery.ts (bundled NASA
                      imagery with credits), realSite.ts (HiRISE DTM loader,
                      Trek tiles, CRISM projection, Perseverance traverse and images)
@@ -487,12 +609,31 @@ NASA Space Apps Challenge 2026 — *Interplanetary Survival Guide: Martian Map*.
 This project was built with AI assistance (Anthropic Claude) for code authoring,
 simulation design and copy.
 
-**No AI-generated images, video or audio appear anywhere in the app.** Every
-visual is either (a) NASA imagery — live Mars Trek tiles, the CRISM browse map and
-Perseverance photographs — credited on the image itself, or (b) generated procedurally at runtime by the code in this repository.
-National flag images are fetched from flagcdn.com (public-domain renderings keyed
-to ISO 3166-1), and are not NASA data. There is therefore no AI-generated imagery
-requiring a watermark.
+**No AI-generated images or video appear anywhere in the app.** Every visual is
+either (a) NASA imagery — live Mars Trek tiles, the CRISM browse map and
+Perseverance photographs — credited on the image itself, or (b) generated
+procedurally at runtime by the code in this repository. National flag images are
+fetched from flagcdn.com (public-domain renderings keyed to ISO 3166-1), and are
+not NASA data. There is therefore no AI-generated imagery requiring a watermark.
+
+**Synthesised speech, and where it comes from.** MERV, the rover companion,
+speaks. In the default configuration that is the browser's own on-device speech
+engine reading text written by hand and committed to this repository — the
+voice is synthetic, the words are not generated. Two optional tiers change that
+and both are disclosed in the app itself, in the comms panel, whenever they are
+running:
+
+- `grounded` sends the microphone to Deepgram's speech-to-text and the reply to
+  Deepgram's text-to-speech. **The words are still this repository's**, so every
+  fact keeps its citation.
+- `agent` additionally hands the wording to a hosted language model. The live
+  simulation telemetry is injected into its prompt and it is given functions
+  that query the simulation for every figure, so the numbers are not generated
+  even here — but the sentences are, and the panel says so in those words. This
+  tier is opt-in and is never selected automatically.
+
+Neither tier is required, neither is on by default, and the project is complete
+without either.
 
 ## Licences and credits
 

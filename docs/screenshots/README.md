@@ -20,6 +20,9 @@ Nothing here is a mock-up or a composite. Every frame is the running build.
 | `11-nasa-feed.jpg` | The public feed, with a packet in flight and a live light-time countdown |
 | `12-dust-storm.jpg` | A regional dust storm at onset: opacity 1.97, visibility 8 km, 10% of the sunlight left, abort recommended |
 | `13-debrief.jpg` | The debrief — this run ran the battery out 66 m from the lander |
+| `14-merv-rover-companion.jpg` | MERV, the rover companion, keeping station off Jack's shoulder on a real rocker-bogie suspension |
+| `15-merv-comms-sourced.jpg` | Rover comms: a sourced answer about Mars and a live weather read, with the tier and the wiring stated at the bottom |
+| `16-merv-unprompted-warning.jpg` | MERV speaking first — an unprompted margin warning on the HUD, mirrored into the mission log, with a dust devil passing |
 
 NASA imagery visible in these frames is credited on the image itself. See the
 root `README.md` for the full data provenance.
