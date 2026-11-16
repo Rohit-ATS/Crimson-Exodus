@@ -3,7 +3,7 @@ import { createServer } from 'node:http'
 import { extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer, WebSocket } from 'ws'
-import { PROTOCOL, ROOM_CAPACITY, ROOM_CODE_RE, RoomRegistry, validateSnapshot } from './rooms.mjs'
+import { PROTOCOL, ROOM_CAPACITY, ROOM_CODE_RE, RoomRegistry, validatePose, validateSnapshot } from './rooms.mjs'
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const dist = join(root, 'dist')
@@ -156,6 +156,7 @@ wss.on('connection', (ws) => {
   const allowMessage = limiter()
   let attached = null
   let lastSnapshotAt = 0
+  let lastPoseAt = 0
 
   const join = (message) => {
     if (attached) return fail(ws, 'ALREADY_JOINED', 'This connection already belongs to a mission.')
@@ -175,7 +176,7 @@ wss.on('connection', (ws) => {
         clientId: client.id, playerId: client.playerId ?? '', callsign: client.callsign,
         resumeToken: client.token, peerConnected: registry.peerConnected(room, client.role),
         roster: registry.occupants(room, client), capacity: ROOM_CAPACITY,
-        snapshot: room.snapshot, history: room.history, commands: room.commands,
+        snapshot: room.snapshot, history: room.history, commands: room.commands, poses: room.poses,
       })
       broadcast(room, { type: 'peer', role: client.role, connected: true }, client)
       announceRoster(room)
@@ -205,6 +206,23 @@ wss.on('connection', (ws) => {
       broadcast(room, { type: 'snapshot', snapshot }, client)
       return
     }
+    if (message.type === 'pose') {
+      if (client.role !== 'ev' && client.role !== 'ev2') return fail(ws, 'FORBIDDEN', 'Only surface crew can publish a pose.')
+      const now = Date.now()
+      if (now - lastPoseAt < 75) return
+      lastPoseAt = now
+      const pose = validatePose(message.pose)
+      if (!pose) return fail(ws, 'BAD_POSE', 'Crew pose was rejected.')
+      const previous = room.poses[client.role]
+      if (previous) {
+        const elapsed = Math.max(0.075, (pose.sentAt - previous.sentAt) / 1000)
+        const distance = Math.hypot(pose.x - previous.x, pose.z - previous.z)
+        if (distance > 45 * elapsed + 8) return fail(ws, 'POSE_SPEED', 'Crew movement exceeded the safety envelope.', true)
+      }
+      room.poses[client.role] = pose
+      broadcast(room, { type: 'pose', role: client.role, pose }, client)
+      return
+    }
     if (message.type === 'command') {
       if (client.role !== 'habcom') return fail(ws, 'FORBIDDEN', 'Only HABCOM can issue operational recommendations.')
       const command = registry.addCommand(room, message.kind, message.note)
@@ -232,6 +250,7 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     if (!attached) return
     registry.detach(attached.room, attached.client)
+    if (attached.client.role === 'ev' || attached.client.role === 'ev2') delete attached.room.poses[attached.client.role]
     broadcast(attached.room, { type: 'peer', role: attached.client.role, connected: false })
     announceRoster(attached.room)
   })

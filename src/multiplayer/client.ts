@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import {
   MULTIPLAYER_PROTOCOL, ROOM_CAPACITY, multiplayerEndpoint, normalizeRoomCode,
   sameConnectionIntent, type ClientMessage, type ConnectionIntent, type CrewMessage, type MissionSnapshot, type MultiplayerRole,
-  type OpsCommand, type OpsCommandKind, type RosterEntry, type ServerMessage,
+  type CrewPose, type OpsCommand, type OpsCommandKind, type RosterEntry, type ServerMessage,
 } from './protocol'
 import { playerIdentity } from '../state/identity'
 import { debugGlobalsEnabled, type DebugGlobalTarget } from '../state/debugGlobals'
@@ -20,19 +20,23 @@ interface MultiplayerState {
   snapshot: MissionSnapshot | null
   history: CrewMessage[]
   commands: OpsCommand[]
+  poses: Partial<Record<'ev' | 'ev2', CrewPose>>
   /** Everyone in the room, including you. */
   roster: RosterEntry[]
   capacity: number
   /** This tab's throwaway callsign, shown so a player knows who they are. */
   callsign: string
   resumableEvRoom: string | null
+  resumableEv2Room: string | null
   resumableHabcomRoom: string | null
   createMission: () => void
   resumeMission: () => void
+  resumeEv2: () => void
   resumeHabcom: () => void
-  joinMission: (code: string) => void
+  joinMission: (code: string, role?: 'ev2' | 'habcom') => void
   leaveMission: () => void
   publishSnapshot: (snapshot: MissionSnapshot) => void
+  publishPose: (pose: CrewPose) => void
   sendCommand: (kind: OpsCommandKind, note?: string) => void
   acknowledgeCommand: (commandId: string, accepted: boolean) => void
   sendChat: (text: string) => void
@@ -135,9 +139,11 @@ function connect(nextIntent: ConnectionIntent) {
         status: 'connected', roomCode: message.roomCode, role: message.role,
         peerConnected: message.peerConnected, snapshot: message.snapshot,
         history: message.history, commands: message.commands, error: null,
+        poses: message.poses ?? {},
         roster: message.roster ?? [], capacity: message.capacity ?? ROOM_CAPACITY,
         callsign: message.callsign || state.callsign,
         resumableEvRoom: message.role === 'ev' ? message.roomCode : state.resumableEvRoom,
+        resumableEv2Room: message.role === 'ev2' ? message.roomCode : state.resumableEv2Room,
         resumableHabcomRoom: message.role === 'habcom' ? message.roomCode : state.resumableHabcomRoom,
       })
     } else if (message.type === 'roster') {
@@ -150,8 +156,12 @@ function connect(nextIntent: ConnectionIntent) {
        * alone while two people were still watching.
        */
       const roster = message.roster ?? []
+      const poses = { ...state.poses }
+      if (!roster.some((entry) => entry.role === 'ev')) delete poses.ev
+      if (!roster.some((entry) => entry.role === 'ev2')) delete poses.ev2
       useMultiplayer.setState({
         roster,
+        poses,
         capacity: message.capacity ?? state.capacity,
         peerConnected: roster.filter((entry) => !entry.you).length > 0,
       })
@@ -162,6 +172,8 @@ function connect(nextIntent: ConnectionIntent) {
       }
     } else if (message.type === 'snapshot') {
       useMultiplayer.setState({ snapshot: message.snapshot })
+    } else if (message.type === 'pose') {
+      useMultiplayer.setState({ poses: { ...state.poses, [message.role]: message.pose } })
     } else if (message.type === 'command') {
       const commands = [...state.commands.filter((item) => item.id !== message.command.id), message.command]
       useMultiplayer.setState({ commands })
@@ -205,10 +217,12 @@ export const useMultiplayer = create<MultiplayerState>((set, get) => ({
   snapshot: null,
   history: [],
   commands: [],
+  poses: {},
   roster: [],
   capacity: ROOM_CAPACITY,
   callsign: typeof window === 'undefined' ? '' : playerIdentity().callsign,
   resumableEvRoom: typeof window === 'undefined' ? null : savedSession('ev')?.roomCode ?? null,
+  resumableEv2Room: typeof window === 'undefined' ? null : savedSession('ev2')?.roomCode ?? null,
   resumableHabcomRoom: typeof window === 'undefined' ? null : savedSession('habcom')?.roomCode ?? null,
 
   createMission: () => connect({ mode: 'create' }),
@@ -217,16 +231,21 @@ export const useMultiplayer = create<MultiplayerState>((set, get) => ({
     if (!saved) { set({ resumableEvRoom: null, error: 'No EV-1 session is available in this browser tab.' }); return }
     connect({ mode: 'join', roomCode: saved.roomCode, role: 'ev', resumeToken: saved.resumeToken })
   },
+  resumeEv2: () => {
+    const saved = savedSession('ev2')
+    if (!saved) { set({ resumableEv2Room: null, error: 'No EV-2 session is available in this browser tab.' }); return }
+    connect({ mode: 'join', roomCode: saved.roomCode, role: 'ev2', resumeToken: saved.resumeToken })
+  },
   resumeHabcom: () => {
     const saved = savedSession('habcom')
     if (!saved) { set({ resumableHabcomRoom: null, error: 'No HABCOM session is available in this browser tab.' }); return }
     connect({ mode: 'join', roomCode: saved.roomCode, role: 'habcom', resumeToken: saved.resumeToken })
   },
-  joinMission: (code) => {
+  joinMission: (code, role = 'habcom') => {
     const roomCode = normalizeRoomCode(code)
     if (roomCode.length !== 6) { set({ error: 'Enter the complete six-character mission code.' }); return }
-    const saved = savedSession('habcom')
-    connect({ mode: 'join', roomCode, role: 'habcom', resumeToken: saved?.roomCode === roomCode ? saved.resumeToken : undefined })
+    const saved = savedSession(role)
+    connect({ mode: 'join', roomCode, role, resumeToken: saved?.roomCode === roomCode ? saved.resumeToken : undefined })
   },
   leaveMission: () => {
     const role = get().role
@@ -242,12 +261,14 @@ export const useMultiplayer = create<MultiplayerState>((set, get) => ({
     set({
       status: endpoint ? 'idle' : 'unavailable', roomCode: null, role: null,
       peerConnected: false, latencyMs: null, error: null, snapshot: null,
-      history: [], commands: [], roster: [],
+      history: [], commands: [], roster: [], poses: {},
       resumableEvRoom: role === 'ev' ? null : get().resumableEvRoom,
+      resumableEv2Room: role === 'ev2' ? null : get().resumableEv2Room,
       resumableHabcomRoom: role === 'habcom' ? null : get().resumableHabcomRoom,
     })
   },
   publishSnapshot: (snapshot) => transmit({ type: 'snapshot', snapshot }),
+  publishPose: (pose) => transmit({ type: 'pose', pose }),
   sendCommand: (kind, note = '') => transmit({ type: 'command', kind, note }),
   acknowledgeCommand: (commandId, accepted) => {
     transmit({ type: 'command_ack', commandId, accepted })

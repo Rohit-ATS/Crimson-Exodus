@@ -20,6 +20,8 @@ import RouteLine from './RouteLine'
 import Markers from './Markers'
 import FlagMesh from './FlagMesh'
 import { DustDevil, DustField } from './Dust'
+import NetworkJack from './NetworkJack'
+import { useMultiplayer } from '../multiplayer/client'
 
 const DEG = Math.PI / 180
 
@@ -62,6 +64,7 @@ export default function SurfaceScene() {
   const cachesUsed = useStore((s) => s.cachesUsed)
   const stormFromDeg = useStore((s) => s.stormFromDeg)
   const mastAt = useMemo(() => mastStation(nearStation), [nearStation])
+  const ev2Pose = useMultiplayer((state) => state.poses.ev2)
 
   const sunDir = useMemo(
     () => sunVector(clock.sunAzimuthDeg, clock.sunElevationDeg),
@@ -162,6 +165,7 @@ export default function SurfaceScene() {
       {flag && <FlagMesh code={flag.code} x={flag.x} z={flag.z} />}
 
       <Jack dust={dustFouling} lampsOn={lampsOn} hidden={live.firstPerson} />
+      {ev2Pose && <NetworkJack pose={ev2Pose} variant="ev2" dust={dustFouling} />}
 
       {/* MERV keeps station off Jack's left shoulder in every mode, including
           first person — where he is the only thing on screen that proves

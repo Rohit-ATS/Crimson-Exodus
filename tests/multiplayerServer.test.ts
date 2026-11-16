@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { RoomRegistry, ROLE_CAPACITY, ROOM_CAPACITY, readIdentity, validateSnapshot } from '../server/rooms.mjs'
+import { RoomRegistry, ROLE_CAPACITY, ROOM_CAPACITY, readIdentity, validatePose, validateSnapshot } from '../server/rooms.mjs'
 import { ROOM_CAPACITY as CLIENT_ROOM_CAPACITY, ROLE_CAPACITY as CLIENT_ROLE_CAPACITY } from '../src/multiplayer/protocol.ts'
 
 const connection = () => ({ closed: null, close(code: number) { this.closed = code } })
@@ -13,7 +13,7 @@ const player = (callsign = 'CREW-AB2') => ({
 })
 
 const snapshot = {
-  protocol: 1,
+  protocol: 2,
   phase: 'surface',
   route: { id: 'ares', progress: 0.5 },
   mission: { evaSec: 100, timeScale: 1, paused: false, activity: 'walk', procedure: null },
@@ -34,13 +34,15 @@ describe('multiplayer room registry', () => {
     assert.equal(first.client.role, 'ev')
   })
 
-  it('seats four: one EV-1 and three at HABCOM', () => {
+  it('seats five: EV-1, EV-2 and three at HABCOM', () => {
     const registry = new RoomRegistry()
     const { room } = registry.create(connection(), player('CREW-EV1'))
     for (let i = 0; i < ROLE_CAPACITY.habcom; i += 1) {
       const joined = registry.join(room.code, 'habcom', connection(), player())
       assert.equal(joined.client.role, 'habcom')
     }
+    const ev2 = registry.join(room.code, 'ev2', connection(), player('CREW-EV2'))
+    assert.equal(ev2.client.role, 'ev2')
     assert.equal(room.clients.size, ROOM_CAPACITY)
     // The fifth is refused, and told why rather than being told the room is
     // occupied when three seats were free.
@@ -77,6 +79,17 @@ describe('multiplayer room registry', () => {
     // One seat, not two, and the stale socket was closed rather than left open.
     assert.equal(room.clients.size, 2)
     assert.equal(first.client.connection.closed, 4001)
+  })
+
+  it('returns EV-2 to the surface seat after a refresh', () => {
+    const registry = new RoomRegistry()
+    const { room } = registry.create(connection(), player('CREW-EV1'))
+    const copilot = player('CREW-EV2')
+    const first = registry.join(room.code, 'ev2', connection(), copilot)
+    const resumed = registry.join(room.code, 'ev2', connection(), copilot)
+    assert.equal(resumed.client.role, 'ev2')
+    assert.equal(first.client.connection.closed, 4001)
+    assert.equal([...room.clients.values()].filter((client) => client.role === 'ev2').length, 1)
   })
 
   it('returns an EV-1 to the driving seat even if the lobby asks for HABCOM', () => {
@@ -172,6 +185,7 @@ describe('multiplayer room registry', () => {
     for (let i = 0; i < ROLE_CAPACITY.habcom; i += 1) {
       registry.join(room.code, 'habcom', connection(), player())
     }
+    registry.join(room.code, 'ev2', connection(), player('CREW-EV2'))
     assert.equal(room.clients.size, ROOM_CAPACITY)
     assert.throws(
       () => registry.join(room.code, 'habcom', connection(), { resumeToken: first.client.token }),
@@ -195,6 +209,17 @@ describe('multiplayer room registry', () => {
     assert.equal(clean.lifeSupport.o2, 1)
     assert.equal(clean.position.x, 0)
     assert.equal(validateSnapshot({ ...snapshot, protocol: 99 }), null)
+  })
+
+  it('clamps untrusted surface poses to the playable safety envelope', () => {
+    const pose = validatePose({ x: 99999, z: -99999, heading: Infinity, speedMs: 999, moving: 7, stride: 12 })
+    assert.ok(pose)
+    assert.equal(pose.x, 1180)
+    assert.equal(pose.z, -1180)
+    assert.equal(pose.heading, 0)
+    assert.equal(pose.speedMs, 40)
+    assert.equal(pose.moving, 1)
+    assert.equal(validatePose(null), null)
   })
 
   it('closes recommendations exactly once', () => {

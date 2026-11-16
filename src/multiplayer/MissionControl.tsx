@@ -17,7 +17,8 @@ function tone(status: string) {
 export default function MissionControl() {
   const multiplayer = useMultiplayer()
   const snapshot = multiplayer.snapshot
-  const surfaceReady = multiplayer.peerConnected && snapshot?.phase === 'surface' && !snapshot.outcome
+  const ev1Linked = multiplayer.roster.some((entry) => entry.role === 'ev')
+  const surfaceReady = ev1Linked && snapshot?.phase === 'surface' && !snapshot.outcome
   const [message, setMessage] = useState('')
   const [note, setNote] = useState('')
   const feed = useRef<HTMLDivElement>(null)
@@ -49,7 +50,7 @@ export default function MissionControl() {
           </div>
           <div className="row gap8 wrap">
             <Chip tone={multiplayer.status === 'connected' ? 'nominal' : 'critical'}>{multiplayer.status}</Chip>
-            <Chip tone={multiplayer.peerConnected ? 'nominal' : 'caution'}>{multiplayer.peerConnected ? 'EV-1 linked' : 'EV-1 offline'}</Chip>
+            <Chip tone={ev1Linked ? 'nominal' : 'caution'}>{ev1Linked ? 'EV-1 linked' : 'EV-1 offline'}</Chip>
             <span className="mono am" style={{ fontSize: 18 }}>{multiplayer.roomCode}</span>
             {multiplayer.latencyMs != null && <span className="src">{multiplayer.latencyMs} ms</span>}
             <button className="btn ghost sm" onClick={multiplayer.leaveMission}>Leave console</button>

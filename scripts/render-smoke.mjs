@@ -47,6 +47,7 @@ try {
   const base = `http://127.0.0.1:${port}`
   const health = await fetch(`${base}/health`)
   assert.equal(health.status, 200)
+  assert.equal((await health.json()).protocol, 2)
 
   const page = await fetch(`${base}/`)
   assert.equal(page.status, 200)

@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { live } from '../state/live'
+import { live, type LiveJack } from '../state/live'
 import { normalAt } from '../mission/terrain'
 
 /**
@@ -51,8 +51,8 @@ const NASA_BLUE = '#0b3d91'
 const NASA_RED = '#fc3d21'
 
 export default function Jack({
-  dust = 0, lampsOn = false, hidden = false,
-}: { dust?: number; lampsOn?: boolean; hidden?: boolean }) {
+  dust = 0, lampsOn = false, hidden = false, source = live.jack, variant = 'ev1',
+}: { dust?: number; lampsOn?: boolean; hidden?: boolean; source?: LiveJack; variant?: 'ev1' | 'ev2' }) {
   const root = useRef<THREE.Group>(null)
   const body = useRef<THREE.Group>(null)
   const legL = useRef<THREE.Group>(null)
@@ -103,7 +103,7 @@ export default function Jack({
         color: GOLD, roughness: 0.075, metalness: 1,
         envMapIntensity: 2.6,
       }),
-      accent: new THREE.MeshStandardMaterial({ color: ACCENT, roughness: 0.6, envMapIntensity: 0.6 }),
+      accent: new THREE.MeshStandardMaterial({ color: variant === 'ev2' ? '#4fe8ff' : ACCENT, roughness: 0.6, envMapIntensity: 0.6 }),
       blue: new THREE.MeshStandardMaterial({ color: NASA_BLUE, roughness: 0.6, envMapIntensity: 0.6 }),
       red: new THREE.MeshStandardMaterial({ color: NASA_RED, roughness: 0.6, envMapIntensity: 0.6 }),
       glass: new THREE.MeshStandardMaterial({
@@ -117,7 +117,7 @@ export default function Jack({
       led: new THREE.MeshStandardMaterial({ color: '#4fe8ff', emissive: '#4fe8ff', emissiveIntensity: 2.6 }),
       ledWarn: new THREE.MeshStandardMaterial({ color: '#ffb24a', emissive: '#ffb24a', emissiveIntensity: 2.2 }),
     }
-  }, [dust])
+  }, [dust, variant])
 
   const clockRef = useRef(0)
   const nextNormalAt = useRef(0)
@@ -127,7 +127,7 @@ export default function Jack({
     clockRef.current += dt
     const g = root.current
     if (!g) return
-    const j = live.jack
+    const j = source
 
     g.position.set(j.x, j.y, j.z)
     // Face the direction of travel, smoothly.

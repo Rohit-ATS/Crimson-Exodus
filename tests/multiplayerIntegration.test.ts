@@ -64,7 +64,7 @@ function nextMessage<T extends { type: string }>(socket: WebSocket, type: string
 }
 
 const snapshot = {
-  protocol: 1,
+  protocol: 2,
   phase: 'surface',
   route: { id: 'ares', progress: 0.42 },
   mission: { evaSec: 600, timeScale: 10, paused: false, activity: 'walk', procedure: null, aborting: false, sheltering: false },
@@ -99,7 +99,7 @@ describe('Render multiplayer service', () => {
   it('serves health and rejects malformed or cross-origin requests', async () => {
     const health = await fetch(`http://127.0.0.1:${port}/health`)
     assert.equal(health.status, 200)
-    assert.deepEqual(await health.json(), { ok: true, protocol: 1, rooms: 0 })
+    assert.deepEqual(await health.json(), { ok: true, protocol: 2, rooms: 0 })
 
     const malformed = await fetch(`http://127.0.0.1:${port}/%E0%A4%A`)
     assert.equal(malformed.status, 400)
@@ -112,12 +112,12 @@ describe('Render multiplayer service', () => {
 
   it('runs create, join, telemetry, chat, command, acknowledgement and reconnect end to end', async () => {
     const ev = await openSocket()
-    ev.send(JSON.stringify({ type: 'create', protocol: 1 }))
+    ev.send(JSON.stringify({ type: 'create', protocol: 2 }))
     const evJoined = await nextMessage<{ type: 'joined'; roomCode: string }>(ev, 'joined')
     assert.match(evJoined.roomCode, /^[A-Z2-9]{6}$/)
 
     const habcom = await openSocket()
-    habcom.send(JSON.stringify({ type: 'join', protocol: 1, roomCode: evJoined.roomCode, role: 'habcom' }))
+    habcom.send(JSON.stringify({ type: 'join', protocol: 2, roomCode: evJoined.roomCode, role: 'habcom' }))
     const habJoined = await nextMessage<{ type: 'joined'; resumeToken: string; peerConnected: boolean }>(habcom, 'joined')
     assert.equal(habJoined.peerConnected, true)
 
@@ -143,7 +143,7 @@ describe('Render multiplayer service', () => {
 
     const resumed = await openSocket()
     resumed.send(JSON.stringify({
-      type: 'join', protocol: 1, roomCode: evJoined.roomCode,
+      type: 'join', protocol: 2, roomCode: evJoined.roomCode,
       role: 'habcom', resumeToken: habJoined.resumeToken,
     }))
     const resumedJoin = await nextMessage<{ type: 'joined'; resumeToken: string; snapshot: typeof snapshot }>(resumed, 'joined')
@@ -155,7 +155,37 @@ describe('Render multiplayer service', () => {
     resumed.close()
   })
 
-  it('seats four crew, refuses the fifth, and lets a refreshed player back in', async () => {
+  it('streams independently validated EV-1 and EV-2 surface poses', async () => {
+    const ev = await openSocket()
+    ev.send(JSON.stringify({ type: 'create', protocol: 2 }))
+    const hosted = await nextMessage<{ type: 'joined'; roomCode: string }>(ev, 'joined')
+
+    const ev2 = await openSocket()
+    ev2.send(JSON.stringify({ type: 'join', protocol: 2, roomCode: hosted.roomCode, role: 'ev2' }))
+    await nextMessage(ev2, 'joined')
+
+    const evPose = { x: 12, z: 24, heading: 0.4, speedMs: 0.9, moving: 1, stride: 2, sentAt: 1 }
+    ev.send(JSON.stringify({ type: 'pose', pose: evPose }))
+    const seenByEv2 = await nextMessage<{ type: 'pose'; role: string; pose: typeof evPose }>(ev2, 'pose')
+    assert.equal(seenByEv2.role, 'ev')
+    assert.equal(seenByEv2.pose.x, 12)
+
+    const ev2Pose = { x: 14, z: 25, heading: -0.2, speedMs: 0.8, moving: 0.7, stride: 3, sentAt: 1 }
+    ev2.send(JSON.stringify({ type: 'pose', pose: ev2Pose }))
+    const seenByEv1 = await nextMessage<{ type: 'pose'; role: string; pose: typeof ev2Pose }>(ev, 'pose')
+    assert.equal(seenByEv1.role, 'ev2')
+    assert.equal(seenByEv1.pose.z, 25)
+
+    await new Promise((resolve) => setTimeout(resolve, 90))
+    ev2.send(JSON.stringify({ type: 'pose', pose: { ...ev2Pose, x: 1100, z: 1100 } }))
+    const rejected = await nextMessage<{ type: 'error'; code: string }>(ev2, 'error')
+    assert.equal(rejected.code, 'POSE_SPEED')
+
+    ev2.close()
+    ev.close()
+  })
+
+  it('seats five crew, refuses the sixth, and lets a refreshed player back in', async () => {
     /**
      * The bug this covers, end to end, against the real server process.
      *
@@ -171,26 +201,33 @@ describe('Render multiplayer service', () => {
     })
 
     const ev = await openSocket()
-    ev.send(JSON.stringify({ type: 'create', protocol: 1, ...identity(1) }))
+    ev.send(JSON.stringify({ type: 'create', protocol: 2, ...identity(1) }))
     const hosted = await nextMessage<{
       type: 'joined'; roomCode: string; callsign: string; capacity: number
       roster: Array<{ callsign: string; role: string; you?: boolean }>
     }>(ev, 'joined')
-    assert.equal(hosted.capacity, 4)
+    assert.equal(hosted.capacity, 5)
     assert.equal(hosted.callsign, identity(1).callsign)
     assert.equal(hosted.roster.length, 1)
     assert.equal(hosted.roster[0].you, true)
+
+    const ev2 = await openSocket()
+    ev2.send(JSON.stringify({
+      type: 'join', protocol: 2, roomCode: hosted.roomCode, role: 'ev2', ...identity(5),
+    }))
+    const surfaceCrew = await nextMessage<{ type: 'joined'; role: string }>(ev2, 'joined')
+    assert.equal(surfaceCrew.role, 'ev2')
 
     // Three more at HABCOM. Every one of these used to be refused.
     const habs: WebSocket[] = []
     for (let n = 2; n <= 4; n += 1) {
       const socket = await openSocket()
       socket.send(JSON.stringify({
-        type: 'join', protocol: 1, roomCode: hosted.roomCode, role: 'habcom', ...identity(n),
+        type: 'join', protocol: 2, roomCode: hosted.roomCode, role: 'habcom', ...identity(n),
       }))
       const joined = await nextMessage<{ type: 'joined'; role: string; roster: unknown[] }>(socket, 'joined')
       assert.equal(joined.role, 'habcom', `crew member ${n} was refused`)
-      assert.equal(joined.roster.length, n)
+      assert.equal(joined.roster.length, n + 1)
       habs.push(socket)
     }
 
@@ -198,7 +235,7 @@ describe('Render multiplayer service', () => {
     // station is occupied while seats are free.
     const fifth = await openSocket()
     fifth.send(JSON.stringify({
-      type: 'join', protocol: 1, roomCode: hosted.roomCode, role: 'habcom', ...identity(5),
+      type: 'join', protocol: 2, roomCode: hosted.roomCode, role: 'habcom', ...identity(6),
     }))
     const refused = await nextMessage<{ type: 'error'; code: string; message: string }>(fifth, 'error')
     assert.equal(refused.code, 'ROOM_FULL')
@@ -209,24 +246,25 @@ describe('Render multiplayer service', () => {
     // one has NOT closed yet. They must get their own seat back.
     const refreshed = await openSocket()
     refreshed.send(JSON.stringify({
-      type: 'join', protocol: 1, roomCode: hosted.roomCode, role: 'habcom', ...identity(3),
+      type: 'join', protocol: 2, roomCode: hosted.roomCode, role: 'habcom', ...identity(3),
     }))
     const back = await nextMessage<{
       type: 'joined'; role: string; callsign: string; roster: unknown[]
     }>(refreshed, 'joined')
     assert.equal(back.role, 'habcom')
     assert.equal(back.callsign, identity(3).callsign)
-    // Still four aboard: they reclaimed a seat rather than taking a new one.
-    assert.equal(back.roster.length, 4)
+    // Still five aboard: they reclaimed a seat rather than taking a new one.
+    assert.equal(back.roster.length, 5)
 
     // And everyone else is told who is in the room.
     const rosterUpdate = await nextMessage<{
       type: 'roster'; roster: Array<{ callsign: string }>; capacity: number
     }>(ev, 'roster')
-    assert.equal(rosterUpdate.capacity, 4)
-    assert.equal(rosterUpdate.roster.length, 4)
+    assert.equal(rosterUpdate.capacity, 5)
+    assert.equal(rosterUpdate.roster.length, 5)
 
     ev.close()
+    ev2.close()
     refreshed.close()
     for (const socket of habs) socket.close()
   })
@@ -234,13 +272,13 @@ describe('Render multiplayer service', () => {
   it('does not let a second player take the EV-1 driving seat', async () => {
     const ev = await openSocket()
     ev.send(JSON.stringify({
-      type: 'create', protocol: 1, playerId: `crew_${'1'.repeat(24)}`, callsign: 'CREW-AA2',
+      type: 'create', protocol: 2, playerId: `crew_${'1'.repeat(24)}`, callsign: 'CREW-AA2',
     }))
     const hosted = await nextMessage<{ type: 'joined'; roomCode: string }>(ev, 'joined')
 
     const intruder = await openSocket()
     intruder.send(JSON.stringify({
-      type: 'join', protocol: 1, roomCode: hosted.roomCode, role: 'ev',
+      type: 'join', protocol: 2, roomCode: hosted.roomCode, role: 'ev',
       playerId: `crew_${'2'.repeat(24)}`, callsign: 'CREW-BB3',
     }))
     const refused = await nextMessage<{ type: 'error'; code: string; message: string }>(intruder, 'error')

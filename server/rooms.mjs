@@ -1,18 +1,17 @@
 import { randomBytes } from 'node:crypto'
 
-export const PROTOCOL = 1
+export const PROTOCOL = 2
 export const ROOM_CODE_RE = /^[A-Z0-9]{6}$/
 
 /**
  * Room capacity.
  *
- * One EV-1, because exactly one person drives Jack and publishes telemetry,
- * and up to three at HABCOM watching the same feed. Four is the number a
- * small team demos with. These must stay in step with ROOM_CAPACITY and
+ * One authoritative EV-1, one independently controlled EV-2, and up to three
+ * at HABCOM watching the same feed. These must stay in step with ROOM_CAPACITY and
  * ROLE_CAPACITY in src/multiplayer/protocol.ts; a test asserts that they do.
  */
-export const ROOM_CAPACITY = 4
-export const ROLE_CAPACITY = { ev: 1, habcom: 3 }
+export const ROOM_CAPACITY = 5
+export const ROLE_CAPACITY = { ev: 1, ev2: 1, habcom: 3 }
 export const PLAYER_ID_RE = /^crew_[0-9a-f]{24}$/
 export const CALLSIGN_RE = /^CREW-[A-Z0-9]{3}$/
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -31,7 +30,7 @@ const id = (prefix) => `${prefix}_${randomBytes(8).toString('hex')}`
  */
 function autoCallsign(room, role) {
   const taken = new Set([...room.clients.values()].map((client) => client.callsign))
-  const stem = role === 'ev' ? 'EV' : 'HAB'
+  const stem = role === 'ev' ? 'E1' : role === 'ev2' ? 'E2' : 'HB'
   for (let n = 1; n < 100; n += 1) {
     const candidate = `CREW-${stem}${n}`
     if (!taken.has(candidate)) return candidate
@@ -106,6 +105,19 @@ export function validateSnapshot(raw) {
   }
 }
 
+export function validatePose(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  return {
+    x: finite(raw.x, -1180, 1180),
+    z: finite(raw.z, -1180, 1180),
+    heading: finite(raw.heading, -Math.PI * 4, Math.PI * 4),
+    speedMs: finite(raw.speedMs, 0, 40),
+    moving: finite(raw.moving, 0, 1),
+    stride: finite(raw.stride, -1e6, 1e6),
+    sentAt: Date.now(),
+  }
+}
+
 /**
  * Normalise whatever the browser sent as an identity.
  *
@@ -130,7 +142,7 @@ export class RoomRegistry {
     do code = roomCode(); while (this.rooms.has(code))
     const room = {
       code, createdAt: Date.now(), emptyAt: null, snapshot: null,
-      clients: new Map(), tokens: new Map(), history: [], commands: [],
+      clients: new Map(), tokens: new Map(), history: [], commands: [], poses: {},
     }
     this.rooms.set(code, room)
     return this.attach(room, 'ev', connection, options)
@@ -157,7 +169,7 @@ export class RoomRegistry {
     if (!ROOM_CODE_RE.test(code)) throw Object.assign(new Error('Mission code must contain six letters or numbers.'), { code: 'ROOM_CODE_INVALID' })
     const room = this.rooms.get(code)
     if (!room) throw Object.assign(new Error('Mission room not found.'), { code: 'ROOM_NOT_FOUND' })
-    if (!['ev', 'habcom'].includes(role)) throw Object.assign(new Error('Unsupported crew role.'), { code: 'ROLE_INVALID' })
+    if (!['ev', 'ev2', 'habcom'].includes(role)) throw Object.assign(new Error('Unsupported crew role.'), { code: 'ROLE_INVALID' })
 
     // 1. The same person, back again. Reclaim whichever seat they held — if
     //    they were EV-1 before a reload, they are still EV-1 now, whatever
@@ -205,12 +217,14 @@ export class RoomRegistry {
     }
     const seated = [...room.clients.values()].filter((client) => client.role === role).length
     if (seated >= ROLE_CAPACITY[role]) {
-      const station = role === 'ev' ? 'EV-1' : 'HABCOM'
+      const station = role === 'ev' ? 'EV-1' : role === 'ev2' ? 'EV-2' : 'HABCOM'
       throw Object.assign(
         new Error(
           role === 'ev'
-            ? 'EV-1 is already crewed. Join as HABCOM instead.'
-            : `All ${ROLE_CAPACITY.habcom} ${station} positions are occupied.`,
+            ? 'EV-1 is already crewed. Join as EV-2 or HABCOM instead.'
+            : role === 'ev2'
+              ? 'EV-2 is already crewed. Join as HABCOM instead.'
+              : `All ${ROLE_CAPACITY.habcom} ${station} positions are occupied.`,
         ),
         { code: 'ROLE_TAKEN' },
       )

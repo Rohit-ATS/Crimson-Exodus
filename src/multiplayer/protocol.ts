@@ -1,16 +1,16 @@
-export const MULTIPLAYER_PROTOCOL = 1 as const
+export const MULTIPLAYER_PROTOCOL = 2 as const
 
 /**
  * How many people can be in one mission room.
  *
- * One EV-1, because exactly one person drives Jack and publishes telemetry,
- * and up to three at HABCOM — a flight director and two others watching the
- * same feed. Four is the number a small team actually demos with.
+ * One authoritative EV-1, one independently controlled EV-2, and up to three
+ * at HABCOM. EV-1 owns shared mission state; both surface clients stream only
+ * compact transforms for the other astronaut.
  */
-export const ROOM_CAPACITY = 4
-export const ROLE_CAPACITY: Record<MultiplayerRole, number> = { ev: 1, habcom: 3 }
+export const ROOM_CAPACITY = 5
+export const ROLE_CAPACITY: Record<MultiplayerRole, number> = { ev: 1, ev2: 1, habcom: 3 }
 
-export type MultiplayerRole = 'ev' | 'habcom'
+export type MultiplayerRole = 'ev' | 'ev2' | 'habcom'
 export type OpsCommandKind = 'go' | 'hold' | 'return'
 export type ConnectionIntent =
   | { mode: 'create' }
@@ -23,6 +23,17 @@ export interface RosterEntry {
   callsign: string
   /** True for the entry describing the recipient. */
   you?: boolean
+}
+
+/** A compact, untrusted transform streamed by either surface player. */
+export interface CrewPose {
+  x: number
+  z: number
+  heading: number
+  speedMs: number
+  moving: number
+  stride: number
+  sentAt: number
 }
 
 export interface MissionSnapshot {
@@ -97,6 +108,7 @@ export type ClientMessage =
       resumeToken?: string
     }
   | { type: 'snapshot'; snapshot: MissionSnapshot }
+  | { type: 'pose'; pose: CrewPose }
   | { type: 'command'; kind: OpsCommandKind; note: string }
   | { type: 'command_ack'; commandId: string; accepted: boolean }
   | { type: 'chat'; text: string }
@@ -120,10 +132,12 @@ export type ServerMessage =
       snapshot: MissionSnapshot | null
       history: CrewMessage[]
       commands: OpsCommand[]
+      poses: Partial<Record<'ev' | 'ev2', CrewPose>>
     }
   | { type: 'peer'; role: MultiplayerRole; connected: boolean }
   | { type: 'roster'; roster: RosterEntry[]; capacity: number }
   | { type: 'snapshot'; snapshot: MissionSnapshot }
+  | { type: 'pose'; role: 'ev' | 'ev2'; pose: CrewPose }
   | { type: 'command'; command: OpsCommand }
   | { type: 'command_ack'; commandId: string; accepted: boolean }
   | { type: 'chat'; message: CrewMessage }

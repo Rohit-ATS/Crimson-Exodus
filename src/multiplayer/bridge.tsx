@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { STATIONS } from '../mission/site'
 import { useStore, type State } from '../state/store'
+import { live } from '../state/live'
 import { useMultiplayer } from './client'
 import { MULTIPLAYER_PROTOCOL, type MissionSnapshot, type OpsCommand } from './protocol'
 
@@ -57,6 +58,20 @@ export default function MultiplayerBridge() {
     return useStore.subscribe((state, previous) => {
       publish(state, state.phase !== previous.phase || state.outcome !== previous.outcome)
     })
+  }, [role, status])
+
+  useEffect(() => {
+    if (status !== 'connected' || role !== 'ev') return
+    const publish = () => {
+      const j = live.jack
+      useMultiplayer.getState().publishPose({
+        x: j.x, z: j.z, heading: j.heading, speedMs: j.speedMs,
+        moving: j.moving, stride: j.stride, sentAt: Date.now(),
+      })
+    }
+    publish()
+    const timer = setInterval(publish, 100)
+    return () => clearInterval(timer)
   }, [role, status])
 
   return null
@@ -148,7 +163,7 @@ export function CrewLinkStatus() {
               <span className="display cy" style={{ letterSpacing: '0.18em' }}>{multiplayer.roomCode}</span>
             </div>
             <div className="src" style={{ margin: '4px 0 8px' }}>
-              {multiplayer.peerConnected ? 'HABCOM LINKED' : 'WAITING FOR HABCOM'}
+              {multiplayer.peerConnected ? 'CREW LINKED' : 'WAITING FOR CREW'}
               {multiplayer.latencyMs != null ? ` · ${multiplayer.latencyMs} ms` : ''}
             </div>
             <div className="scroll" style={{ height: 110, border: '1px solid var(--line-soft)', padding: 6 }}>
@@ -160,7 +175,7 @@ export function CrewLinkStatus() {
             </div>
             <div className="row gap6" style={{ marginTop: 7 }}>
               <input
-                aria-label="Message HABCOM" value={text} maxLength={240} onChange={(event) => setText(event.target.value)}
+                aria-label="Message crew" value={text} maxLength={240} onChange={(event) => setText(event.target.value)}
                 onKeyDown={(event) => { if (event.key === 'Enter') send() }}
                 style={{ flex: 1, minWidth: 0, padding: '6px 8px', background: '#05080d', border: '1px solid var(--line)' }}
               />

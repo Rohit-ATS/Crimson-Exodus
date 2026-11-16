@@ -11,6 +11,7 @@ const Planning = lazy(() => import('./ui/Planning'))
 const Surface = lazy(() => import('./ui/Surface'))
 const Debrief = lazy(() => import('./ui/Debrief'))
 const MissionControl = lazy(() => import('./multiplayer/MissionControl'))
+const CoopSurface = lazy(() => import('./multiplayer/CoopSurface'))
 import DataPanel from './ui/panels/DataPanel'
 import { openDataPanel } from './ui/dataPanelBus'
 import ErrorBoundary from './ui/ErrorBoundary'
@@ -115,6 +116,14 @@ export default function App() {
     return (
       <Suspense fallback={<div className="screen center grid-bg"><span className="display cy">OPENING HABCOM CONSOLE</span></div>}>
         <MissionControl />
+      </Suspense>
+    )
+  }
+
+  if (multiplayerRole === 'ev2' && (multiplayerStatus === 'connected' || multiplayerStatus === 'reconnecting')) {
+    return (
+      <Suspense fallback={<div className="screen center grid-bg"><span className="display cy">OPENING EV-2 SURFACE LINK</span></div>}>
+        <CoopSurface />
       </Suspense>
     )
   }

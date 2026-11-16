@@ -74,15 +74,18 @@ synthesis go to `api.deepgram.com`. Configure nothing and he still talks — see
 
 ### Multiplayer on Render
 
-Multiplayer is deliberately asymmetric. **EV-1** runs the unchanged 3D mission;
-**HABCOM** opens the same URL on a phone, tablet or second computer and receives a
-small, whitelisted telemetry snapshot four times per second. HABCOM can send crew
-messages and `GO`, `HOLD` or `RETURN` recommendations. The latter two never seize
-the suit controls: EV-1 must acknowledge them before they pause the mission or
-start the return traverse.
+Multiplayer supports full two-person surface co-op. **EV-1** owns the authoritative
+mission clock, science procedures, shared life support and outcome. **EV-2** opens
+the same URL on another computer, joins the same 3D terrain, and walks independently
+with their own camera and controls. Each client streams a compact pose at 10 Hz;
+the other astronaut is interpolated between updates, while Render clamps coordinates,
+rate-limits updates and rejects impossible movement. **HABCOM** remains available on
+phones and tablets with telemetry plus `GO`, `HOLD` and `RETURN` recommendations.
 
-A room holds **four**: one EV-1, because exactly one person drives Jack and
-publishes telemetry, and up to three at HABCOM watching the same feed.
+A room holds **five**: EV-1, EV-2 and up to three HABCOM stations. Keeping shared
+science authoritative on EV-1 prevents two browsers from completing the same core,
+cache or ingress procedure twice while still allowing both astronauts to explore
+the surface together.
 
 **There is no sign-up, and there are no accounts.** Every visitor is handed a
 throwaway identity the moment the page loads — random bytes and a readable
