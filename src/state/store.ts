@@ -195,7 +195,7 @@ export interface LogEntry {
   text: string
 }
 
-export type UiPanel = null | 'comms' | 'backpack' | 'science' | 'flag' | 'data' | 'rules' | 'map' | 'realsite' | 'objectives' | 'settings'
+export type UiPanel = null | 'comms' | 'rover' | 'backpack' | 'science' | 'flag' | 'data' | 'rules' | 'map' | 'realsite' | 'objectives' | 'settings'
 
 export type OutcomeCode =
   | 'returned-nominal'
