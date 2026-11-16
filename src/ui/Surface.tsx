@@ -5,6 +5,7 @@ import SciencePanel from './panels/SciencePanel'
 import FlagPicker from './panels/FlagPicker'
 import BackpackPanel from './panels/BackpackPanel'
 import CommsPanel from './panels/CommsPanel'
+import RoverPanel from './panels/RoverPanel'
 import DataPanel from './panels/DataPanel'
 import MapPanel from './panels/MapPanel'
 import RealSitePanel from './panels/RealSitePanel'
@@ -16,12 +17,55 @@ import { useStore } from '../state/store'
 import { useSimLoop } from '../state/useSimLoop'
 import { installInput, onPress } from '../state/input'
 import { live } from '../state/live'
+import { useMerv } from '../state/merv'
 
 export default function Surface() {
   useSimLoop()
   const ui = useStore((s) => s.ui)
 
   useEffect(() => installInput(), [])
+
+  /**
+   * Bring MERV's comms link up for this EVA, and take it down on the way out.
+   *
+   * Reset first: `Surface` mounts once per run, so a second EVA must start
+   * with an empty transcript and a fresh credential rather than inheriting the
+   * last one's conversation.
+   */
+  useEffect(() => {
+    const merv = useMerv.getState()
+    merv.reset()
+    void merv.boot()
+    return () => useMerv.getState().shutdown()
+  }, [])
+
+  /**
+   * Hold X to talk, from anywhere on the surface.
+   *
+   * Push-to-talk rather than open-mic on the lower tiers, because the usual
+   * venue for this is a room with forty other people talking in it. The agent
+   * tier ignores this and listens continuously — it does its own endpointing,
+   * which is most of what you are paying it for.
+   */
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== 'KeyX' || e.repeat) return
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      const s = useStore.getState()
+      if (s.proc || s.uplink) return
+      void useMerv.getState().startTalking()
+    }
+    const up = (e: KeyboardEvent) => {
+      if (e.code !== 'KeyX') return
+      useMerv.getState().stopTalking()
+    }
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+    }
+  }, [])
 
   useEffect(() => {
     return onPress((code) => {
@@ -57,6 +101,7 @@ export default function Surface() {
         case 'KeyB': s.setUi('backpack'); break
         case 'KeyM': s.setUi('map'); break
         case 'KeyT': s.setUi('comms'); break
+        case 'KeyJ': s.setUi('rover'); break
         case 'KeyK': s.setUi('data'); break
         case 'KeyN': s.setUi('realsite'); break
         case 'KeyH': s.toggleHazardOverlay(); break
@@ -135,6 +180,7 @@ export default function Surface() {
       {ui === 'flag' && <FlagPicker />}
       {ui === 'backpack' && <BackpackPanel />}
       {ui === 'comms' && <CommsPanel />}
+      {ui === 'rover' && <RoverPanel />}
       {ui === 'map' && <MapPanel />}
       {ui === 'realsite' && <RealSitePanel onClose={() => useStore.getState().setUi(null)} />}
       {ui === 'data' && <DataPanel onClose={() => useStore.getState().setUi(null)} />}

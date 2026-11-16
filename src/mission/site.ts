@@ -182,6 +182,18 @@ export const PROVENANCE: Provenance[] = [
       'Flags are fetched from a public CDN at runtime and are not NASA data. If the network is unavailable the app falls back to a drawn approximation and says so. Planting a flag is a symbolic act in this game; the Outer Space Treaty is explicit that it creates no claim of sovereignty.',
     kind: 'imagery',
   },
+  {
+    id: 'merv',
+    label: 'MERV, the rover companion',
+    instrument: 'Fictional scout rover; real rocker-bogie kinematics and solar power model',
+    source: 'This project. Facts quoted by MERV are sourced individually in the transcript.',
+    date: 'n/a',
+    resolution: 'n/a',
+    url: 'https://science.nasa.gov/mission/mars-2020-perseverance/rover-components/',
+    caveat:
+      'MERV IS NOT A REAL OR PLANNED VEHICLE. What is faithful: the suspension is a rocker-bogie, the passive two-joint-per-side design NASA has used on every Mars rover since Sojourner in 1997, and it is articulated here the way the real one works; the power model is a solar array whose output collapses with dust loading and low sun, which is what ended Opportunity in 2018 and InSight in 2022. What is fiction: the speed. Perseverance tops out near 0.042 m/s (152 m/h). MERV moves at walking pace so that a companion can actually accompany you, and that is the one deliberate departure in the vehicle. Separately: every Mars fact MERV states comes from a hand-written, individually sourced knowledge base in this repository and carries its citation in the transcript; every mission number he quotes is read live from the simulation. If an optional Deepgram voice service is configured, it supplies speech recognition and synthesis — and on the opt-in agent tier, a hosted language model composes the wording with the live telemetry in its prompt and functions that query this simulation for every figure. That tier is labelled in the comms panel whenever it is running.',
+    kind: 'synthetic',
+  },
 ]
 
 export const SITE = {

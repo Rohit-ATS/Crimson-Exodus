@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Chip, Meter } from './components/kit'
 import { missionStatus } from '../mission/objectives'
 import Coach from './Coach'
+import RoverDock from './RoverDock'
 import { useStore } from '../state/store'
 import { JACK_SUIT, CONSUMABLE_LABEL } from '../sim/consumables'
 import { formatHours, seasonName } from '../sim/orbits'
@@ -356,6 +357,7 @@ export default function Hud() {
         }}
       >
         <Coach placement="surface" />
+        <RoverDock />
         <ObjectiveStrip />
         {/* Rolling log, in the same column so nothing overlaps */}
         <div className="stack gap4" style={{ marginBottom: 8, pointerEvents: 'none' }}>
@@ -458,6 +460,8 @@ export default function Hud() {
           <Key k="N" v="NASA site" />
           <Key k="H" v="hazard" />
           <Key k="T" v="comms" />
+          <Key k="J" v="MERV" />
+          <Key k="X" v="talk" />
           <Key k="K" v="data" />
         </div>
 

@@ -35,6 +35,10 @@ const KEYS: Array<[string, Array<[string, string]>]> = [
     ['R', 'Swap consumables at a depot in reach'],
     ['Enter', 'Ingress at the lander and end the EVA'],
   ]],
+  ['Talking to MERV', [
+    ['X (hold)', 'Hold to talk to the rover, from anywhere on the surface'],
+    ['J', 'Rover comms transcript — type a question, or read the log'],
+  ]],
   ['Looking things up', [
     ['O', 'Mission objectives and your Mars field guide'],
     ['M', 'Mission map'],

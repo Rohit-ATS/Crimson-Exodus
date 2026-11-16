@@ -7,6 +7,7 @@ import { SITE } from '../mission/site'
 import { formatDelay } from '../sim/comms'
 import { GALLERY } from '../data/nasaGallery'
 import SurvivalGuide from './panels/SurvivalGuide'
+import RoverPanel from './panels/RoverPanel'
 
 /** Four frames that say, without a word, what this is built on. */
 const PROOF = ['abrasionPatches', 'watsonDourbes', 'coreInDrill', 'deltaPano'] as const
@@ -16,6 +17,7 @@ export default function TitleScreen() {
   const startBriefing = useStore((s) => s.startBriefing)
   const quickDemo = useStore((s) => s.quickDemo)
   const [showGuide, setShowGuide] = useState(false)
+  const [showRover, setShowRover] = useState(false)
   const [, bump] = useState(0)
   const [showControls, setShowControls] = useState(false)
 
@@ -32,7 +34,7 @@ export default function TitleScreen() {
 
       // A dialog owns the keyboard while it is up. Without this, Enter starts
       // the mission behind an open survival guide.
-      if (showGuide) return
+      if (showGuide || showRover) return
 
       if (event.code === 'Enter' || event.code === 'NumpadEnter') {
         event.preventDefault()
@@ -44,7 +46,7 @@ export default function TitleScreen() {
     }
     window.addEventListener('keydown', handleShortcut)
     return () => window.removeEventListener('keydown', handleShortcut)
-  }, [startBriefing, showGuide])
+  }, [startBriefing, showGuide, showRover])
 
   const now = new Date()
   const link = linkGeometry(now)
@@ -142,6 +144,16 @@ export default function TitleScreen() {
             cannot answer in time.
           </p>
 
+          <p style={{ fontSize: 'clamp(13px, 1.25vw, 16px)', maxWidth: 700, color: '#9fb9cb', marginTop: -4 }}>
+            You are not alone out there. <span className="cy">MERV</span>, a six-wheeled scout
+            rover, keeps station off your left shoulder for the whole EVA. Talk to him — hold
+            <span className="mono cy"> X </span> on the surface, or press
+            <span className="mono cy"> J </span> anywhere, including here. He answers questions
+            about Mars from a sourced knowledge base, reads your consumables and the weather
+            straight out of the simulation, and speaks up on his own when something crosses a
+            line. He will tell you when he does not know.
+          </p>
+
           {/* What you will actually be looking at. Real photographs, on the
               first screen, because the single hardest thing to establish in
               five seconds is that the NASA data here is not decoration. */}
@@ -193,6 +205,13 @@ export default function TitleScreen() {
             </button>
             <button className="btn ghost" style={{ padding: '15px 22px' }} onClick={() => setShowGuide(true)}>
               Mars survival guide
+            </button>
+            <button
+              className="btn ghost"
+              style={{ padding: '15px 22px' }}
+              onClick={() => setShowRover(true)}
+            >
+              Talk to MERV [J]
             </button>
             <button className="btn ghost" style={{ padding: '15px 22px' }} onClick={() => setShowControls((v) => !v)}>
               {showControls ? 'Hide controls' : 'Controls & mission rules [?]'}
@@ -298,6 +317,7 @@ export default function TitleScreen() {
       </div>
 
       {showGuide && <SurvivalGuide onClose={() => setShowGuide(false)} />}
+      {showRover && <RoverPanel onClose={() => setShowRover(false)} />}
     </div>
   )
 }

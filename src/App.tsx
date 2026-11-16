@@ -10,6 +10,7 @@ import Briefing from './ui/Briefing'
 const Planning = lazy(() => import('./ui/Planning'))
 const Surface = lazy(() => import('./ui/Surface'))
 const Debrief = lazy(() => import('./ui/Debrief'))
+const RoverPanel = lazy(() => import('./ui/panels/RoverPanel'))
 import DataPanel from './ui/panels/DataPanel'
 import { openDataPanel } from './ui/dataPanelBus'
 import ErrorBoundary from './ui/ErrorBoundary'
@@ -80,17 +81,26 @@ export default function App() {
     document.documentElement.classList.toggle('reduced-motion', reducedMotion)
   }, [reducedMotion])
   const [data, setData] = useState(false)
+  // MERV is reachable from every screen, not only the surface. Being able to
+  // interrogate the survival guide before you are in danger is the point.
+  const [rover, setRover] = useState(false)
   // Bumping this remounts the lazy subtree, which retries a failed chunk fetch.
   const [boundaryKey, setBoundaryKey] = useState(0)
 
   // Any screen can ask for the provenance panel through a tiny event bus.
   useEffect(() => openDataPanel.subscribe(() => setData(true)), [])
 
-  // A global shortcut to the provenance panel, available on every screen.
+  // Global shortcuts available on every screen: the provenance panel and the
+  // rover comms link.
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.code === 'KeyK' && phase !== 'surface') setData((v) => !v)
-      if (e.code === 'Escape') setData(false)
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (phase !== 'surface') {
+        if (e.code === 'KeyK') setData((v) => !v)
+        // The panel brings the link up itself on mount.
+        if (e.code === 'KeyJ') setRover((v) => !v)
+      }
+      if (e.code === 'Escape') { setData(false); setRover(false) }
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
@@ -116,6 +126,12 @@ export default function App() {
       {(phase === 'briefing' || phase === 'planning') && <Coach placement="screen" />}
 
       {data && phase !== 'surface' && <DataPanel onClose={() => setData(false)} />}
+
+      {rover && phase !== 'surface' && (
+        <Suspense fallback={null}>
+          <RoverPanel onClose={() => setRover(false)} />
+        </Suspense>
+      )}
 
       <PhaseTransition phase={phase} />
     </>
