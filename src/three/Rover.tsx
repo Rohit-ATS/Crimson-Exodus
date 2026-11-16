@@ -1,6 +1,7 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { live } from '../state/live'
 import { renderTier } from '../state/settings'
 import {
@@ -49,6 +50,129 @@ const NASA_RED = '#fc3d21'
 /** How often the six wheel contacts are resampled, seconds. */
 const SUSPENSION_HZ = 1 / 22
 
+/**
+ * One wheel, as a single merged geometry.
+ *
+ * A cleated wheel drawn as separate meshes is a tyre, a hub and twelve
+ * grousers — fourteen draw calls, times six wheels, for a vehicle that is
+ * usually forty metres away. Merging them into one buffer per tier turns the
+ * whole running gear into six draw calls and costs nothing visually, because
+ * every part shares a material anyway.
+ *
+ * Built lazily and cached: the tier rarely changes and the geometry never
+ * does.
+ */
+const wheelGeometryCache = new Map<number, THREE.BufferGeometry>()
+
+function wheelGeometry(tier: number): THREE.BufferGeometry {
+  const hit = wheelGeometryCache.get(tier)
+  if (hit) return hit
+
+  const parts: THREE.BufferGeometry[] = []
+
+  // The tyre. Rotated so the cylinder axis runs across the vehicle.
+  const tyre = new THREE.CylinderGeometry(WHEEL_R, WHEEL_R, 0.2, tier === 0 ? 12 : 22)
+  tyre.rotateZ(Math.PI / 2)
+  parts.push(tyre)
+
+  // Hub.
+  const hub = new THREE.CylinderGeometry(0.075, 0.075, 0.215, 10)
+  hub.rotateZ(Math.PI / 2)
+  parts.push(hub)
+
+  /**
+   * Grousers: the cleats that give a wheel grip in loose regolith. Real rover
+   * wheels are covered in them, and they are what makes a spinning wheel read
+   * as rotating rather than as a smooth blur.
+   */
+  const cleats = tier === 0 ? 6 : 12
+  for (let c = 0; c < cleats; c++) {
+    const a = (c / cleats) * Math.PI * 2
+    const g = new THREE.BoxGeometry(0.21, 0.016, 0.05)
+    g.rotateX(-a)
+    g.translate(0, Math.cos(a) * WHEEL_R, Math.sin(a) * WHEEL_R)
+    parts.push(g)
+  }
+
+  const merged = mergeGeometries(parts, false) ?? tyre
+  for (const g of parts) if (g !== merged) g.dispose()
+  wheelGeometryCache.set(tier, merged)
+  return merged
+}
+
+/**
+ * One wheel.
+ *
+ * Declared at module scope, NOT inside `Rover`. A component defined inside a
+ * render function gets a new identity on every render, and React treats a new
+ * identity as a different component — so the whole running gear was being
+ * unmounted and rebuilt twenty times a second, which showed up as frame
+ * spikes to 100 ms while walking even though the median stayed at 60 fps.
+ */
+function Wheel({
+  index, geometry, material, bind,
+}: {
+  index: number
+  geometry: THREE.BufferGeometry
+  material: THREE.Material
+  bind: (i: number, el: THREE.Group | null) => void
+}) {
+  const [wx, wz] = WHEELS[index]
+  return (
+    <group ref={(el) => bind(index, el)} position={[wx, -CLEARANCE, wz]}>
+      {/* The rolling part is one mesh; the outer group carries the steering
+          angle so the two rotations do not fight. */}
+      <mesh geometry={geometry} material={material} castShadow />
+    </group>
+  )
+}
+
+/** One side's rocker-bogie arm set, with the three wheels it carries. */
+function Side({
+  sign, geometry, wheelMat, armMat, bindWheel, bindRocker, bindBogie,
+}: {
+  sign: 1 | -1
+  geometry: THREE.BufferGeometry
+  wheelMat: THREE.Material
+  armMat: THREE.Material
+  bindWheel: (i: number, el: THREE.Group | null) => void
+  bindRocker: (i: number, el: THREE.Group | null) => void
+  bindBogie: (i: number, el: THREE.Group | null) => void
+}) {
+  const si = sign > 0 ? 1 : 0
+  const front = sign > 0 ? 1 : 0
+  const mid = sign > 0 ? 3 : 2
+  const rear = sign > 0 ? 5 : 4
+  const w = (i: number) => (
+    <Wheel index={i} geometry={geometry} material={wheelMat} bind={bindWheel} />
+  )
+  return (
+    <group>
+      {/* Rocker: pivots at the chassis, front wheel on one end. */}
+      <group ref={(el) => bindRocker(si, el)} position={[sign * TRACK, 0.02, 0]}>
+        <mesh position={[0, -0.14, WHEEL_BASE / 2]} rotation={[0.3, 0, 0]} material={armMat} castShadow>
+          <boxGeometry args={[0.07, 0.07, WHEEL_BASE * 1.05]} />
+        </mesh>
+        <group position={[-sign * TRACK, 0, 0]}>{w(front)}</group>
+      </group>
+
+      {/* Bogie: hangs off the other end of the rocker and carries the middle
+          and rear wheels. Two passive joints, no springs — exactly the real
+          arrangement. */}
+      <group ref={(el) => bindBogie(si, el)} position={[sign * TRACK, -0.04, -WHEEL_BASE * 0.5]}>
+        <mesh position={[0, -0.1, WHEEL_BASE * 0.5]} rotation={[-0.16, 0, 0]} material={armMat} castShadow>
+          <boxGeometry args={[0.062, 0.062, WHEEL_BASE * 0.72]} />
+        </mesh>
+        <mesh position={[0, -0.1, -WHEEL_BASE * 0.5]} rotation={[0.16, 0, 0]} material={armMat} castShadow>
+          <boxGeometry args={[0.062, 0.062, WHEEL_BASE * 0.72]} />
+        </mesh>
+        <group position={[-sign * TRACK, 0, WHEEL_BASE * 0.5]}>{w(mid)}</group>
+        <group position={[-sign * TRACK, 0, -WHEEL_BASE * 0.5]}>{w(rear)}</group>
+      </group>
+    </group>
+  )
+}
+
 export default function Rover({
   dust = 0, lampsOn = false, stationPos = null, stormFromDeg = 0,
 }: {
@@ -72,16 +196,38 @@ export default function Rover({
   const lamps = useRef<THREE.Group>(null)
 
   const tier = renderTier.current.tier
+  const wheelGeo = useMemo(() => wheelGeometry(tier), [tier])
 
+  // Stable callbacks, so the wheel groups are not re-attached every render.
+  const bindWheel = useMemo(
+    () => (i: number, el: THREE.Group | null) => { wheelRefs.current[i] = el }, [],
+  )
+  const bindRocker = useMemo(
+    () => (i: number, el: THREE.Group | null) => { rockers.current[i] = el }, [],
+  )
+  const bindBogie = useMemo(
+    () => (i: number, el: THREE.Group | null) => { bogies.current[i] = el }, [],
+  )
+
+  /**
+   * Materials are built ONCE and then mutated.
+   *
+   * `dust` changes on every simulation tick, so keying this memo on it
+   * rebuilt eleven materials twenty times a second — and a new material means
+   * a new shader program, which is the most expensive thing you can do per
+   * frame. The colours are updated in place by the effect below instead,
+   * which costs a uniform upload and nothing else. `NearClasts` already does
+   * this for the same reason.
+   */
   const mats = useMemo(() => {
     const tint = (hex: string, amount: number) =>
       new THREE.Color(hex).lerp(new THREE.Color('#9a7048'), amount)
     return {
       body: new THREE.MeshStandardMaterial({
-        color: tint(BODY, dust * 0.5), roughness: 0.58, metalness: 0.08, envMapIntensity: 0.85,
+        color: tint(BODY, 0), roughness: 0.58, metalness: 0.08, envMapIntensity: 0.85,
       }),
       bodyShade: new THREE.MeshStandardMaterial({
-        color: tint(BODY_SHADE, dust * 0.6), roughness: 0.7, metalness: 0.1, envMapIntensity: 0.7,
+        color: tint(BODY_SHADE, 0), roughness: 0.7, metalness: 0.1, envMapIntensity: 0.7,
       }),
       // Kapton MLI is a real specular gold film, so it needs the environment
       // map to read as anything other than a yellow box.
@@ -97,7 +243,7 @@ export default function Rover({
       // Dust loads the wheels and the lower structure far harder than the deck,
       // because that is where it comes from.
       wheel: new THREE.MeshStandardMaterial({
-        color: tint(WHEEL, Math.min(0.8, dust * 1.4)), roughness: 0.92, metalness: 0.12,
+        color: tint(WHEEL, 0), roughness: 0.92, metalness: 0.12,
       }),
       // Solar cells: near-mirror, very dark, and they lose contrast as dust
       // settles. The visual and the power model are driven by the same number.
@@ -107,22 +253,38 @@ export default function Rover({
       // which stops it reading as an array at exactly the angle the player
       // usually sees it from.
       cells: new THREE.MeshStandardMaterial({
-        color: new THREE.Color(CELL).lerp(new THREE.Color('#a9865c'), Math.min(0.85, live.rover.arrayDust)),
-        roughness: 0.34 + 0.4 * Math.min(1, live.rover.arrayDust),
-        metalness: 0.45,
-        envMapIntensity: 0.55,
+        color: new THREE.Color(CELL), roughness: 0.34, metalness: 0.45, envMapIntensity: 0.55,
       }),
       lens: new THREE.MeshStandardMaterial({ color: '#0b1016', roughness: 0.05, metalness: 0.9 }),
       blue: new THREE.MeshStandardMaterial({ color: NASA_BLUE, roughness: 0.55, envMapIntensity: 0.6 }),
       red: new THREE.MeshStandardMaterial({ color: NASA_RED, roughness: 0.55, envMapIntensity: 0.6 }),
       lamp: new THREE.MeshStandardMaterial({
-        color: '#fff6e2', emissive: '#fff0d0', emissiveIntensity: lampsOn ? 3.4 : 0.05,
+        color: '#fff6e2', emissive: '#fff0d0', emissiveIntensity: 0.05,
       }),
       status: new THREE.MeshStandardMaterial({
         color: '#4fe8ff', emissive: '#4fe8ff', emissiveIntensity: 2.2, toneMapped: false,
       }),
     }
-  }, [dust, lampsOn])
+    // Built once. See the comment above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /** Dust loading, applied in place. No new materials, no shader rebuilds. */
+  useEffect(() => {
+    const tint = (hex: string, amount: number) =>
+      new THREE.Color(hex).lerp(new THREE.Color('#9a7048'), amount)
+    mats.body.color.copy(tint(BODY, dust * 0.5))
+    mats.bodyShade.color.copy(tint(BODY_SHADE, dust * 0.6))
+    mats.wheel.color.copy(tint(WHEEL, Math.min(0.8, dust * 1.4)))
+  }, [mats, dust])
+
+  /** The array dims as it silts up — the same number the power model uses. */
+  useFrame(() => {
+    const d = Math.min(0.85, live.rover.arrayDust)
+    mats.cells.color.copy(new THREE.Color(CELL).lerp(new THREE.Color('#a9865c'), d))
+    mats.cells.roughness = 0.34 + 0.4 * d
+    mats.lamp.emissiveIntensity = lampsOn ? 3.4 : 0.05
+  })
 
   /** Dust thrown up by the wheels. One small buffer, reused. */
   const plumeGeo = useMemo(() => {
@@ -314,81 +476,18 @@ export default function Rover({
     }
   })
 
-  /** One wheel: hub, rim and visible grousers. */
-  const Wheel = ({ i }: { i: number }) => {
-    const [wx, wz] = WHEELS[i]
-    const cleats = tier === 0 ? 6 : 12
-    return (
-      <group ref={(el) => { wheelRefs.current[i] = el }} position={[wx, -CLEARANCE, wz]}>
-        <group>
-          {/* The tyre. Rotated so the cylinder axis runs across the vehicle. */}
-          <mesh rotation={[0, 0, Math.PI / 2]} material={mats.wheel} castShadow>
-            <cylinderGeometry args={[WHEEL_R, WHEEL_R, 0.2, tier === 0 ? 12 : 22]} />
-          </mesh>
-          {/* Grousers: the cleats that give a wheel grip in loose regolith.
-              Real rover wheels are covered in them, and they are what makes a
-              spinning wheel legible rather than a smooth blur. */}
-          {Array.from({ length: cleats }, (_, c) => {
-            const a = (c / cleats) * Math.PI * 2
-            return (
-              <mesh
-                key={c}
-                position={[0, Math.cos(a) * WHEEL_R, Math.sin(a) * WHEEL_R]}
-                rotation={[-a, 0, 0]}
-                material={mats.metal}
-              >
-                <boxGeometry args={[0.21, 0.016, 0.05]} />
-              </mesh>
-            )
-          })}
-          {/* Hub and spokes. */}
-          <mesh rotation={[0, 0, Math.PI / 2]} material={mats.metal}>
-            <cylinderGeometry args={[0.075, 0.075, 0.215, 10]} />
-          </mesh>
-        </group>
-      </group>
-    )
-  }
-
-  /** One side's rocker-bogie arm set, with the three wheels it carries. */
-  const Side = ({ sign }: { sign: 1 | -1 }) => {
-    const si = sign > 0 ? 1 : 0
-    const front = sign > 0 ? 1 : 0
-    const mid = sign > 0 ? 3 : 2
-    const rear = sign > 0 ? 5 : 4
-    return (
-      <group position={[0, 0, 0]}>
-        {/* Rocker: pivots at the chassis, front wheel on one end. */}
-        <group ref={(el) => { rockers.current[si] = el }} position={[sign * TRACK, 0.02, 0]}>
-          <mesh position={[0, -0.14, WHEEL_BASE / 2]} rotation={[0.3, 0, 0]} material={mats.metal} castShadow>
-            <boxGeometry args={[0.07, 0.07, WHEEL_BASE * 1.05]} />
-          </mesh>
-          <group position={[-sign * TRACK, 0, 0]}><Wheel i={front} /></group>
-        </group>
-
-        {/* Bogie: hangs off the other end of the rocker and carries the middle
-            and rear wheels. Two passive joints, no springs — exactly the real
-            arrangement. */}
-        <group ref={(el) => { bogies.current[si] = el }} position={[sign * TRACK, -0.04, -WHEEL_BASE * 0.5]}>
-          <mesh position={[0, -0.1, WHEEL_BASE * 0.5]} rotation={[-0.16, 0, 0]} material={mats.metal} castShadow>
-            <boxGeometry args={[0.062, 0.062, WHEEL_BASE * 0.72]} />
-          </mesh>
-          <mesh position={[0, -0.1, -WHEEL_BASE * 0.5]} rotation={[0.16, 0, 0]} material={mats.metal} castShadow>
-            <boxGeometry args={[0.062, 0.062, WHEEL_BASE * 0.72]} />
-          </mesh>
-          <group position={[-sign * TRACK, 0, WHEEL_BASE * 0.5]}><Wheel i={mid} /></group>
-          <group position={[-sign * TRACK, 0, -WHEEL_BASE * 0.5]}><Wheel i={rear} /></group>
-        </group>
-      </group>
-    )
-  }
-
   return (
     <group ref={root}>
       {/* Suspension and wheels sit outside the pitching chassis group, because
           the ground does not pitch with the body. */}
-      <Side sign={-1} />
-      <Side sign={1} />
+      <Side
+        sign={-1} geometry={wheelGeo} wheelMat={mats.wheel} armMat={mats.metal}
+        bindWheel={bindWheel} bindRocker={bindRocker} bindBogie={bindBogie}
+      />
+      <Side
+        sign={1} geometry={wheelGeo} wheelMat={mats.wheel} armMat={mats.metal}
+        bindWheel={bindWheel} bindRocker={bindRocker} bindBogie={bindBogie}
+      />
 
       <group ref={chassis}>
         {/* ---- Warm electronics box ------------------------------------- */}

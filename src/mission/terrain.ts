@@ -165,21 +165,113 @@ const CRATERS: Crater[] = (() => {
   return out
 })()
 
+/**
+ * Spatial index over the craters.
+ *
+ * ===========================================================================
+ *  This is the hottest code in the project, and it is worth saying why.
+ *
+ *  `heightAt` is the one authoritative height field: the 3D mesh, the map,
+ *  the elevation profile, the route cost model, the hazard raster, the ground
+ *  litter and the rover's six wheel contacts all read it. While the player
+ *  walks it is evaluated thousands of times a second. A CPU profile of the
+ *  walking case put a third of all samples inside terrain evaluation, and
+ *  `craterAt` alone was the single largest non-idle cost — larger than
+ *  `heightAt` itself.
+ *
+ *  The reason was simple: it tested all 46 craters on every sample, with a
+ *  `Math.hypot` each, when a given point is within reach of two or three.
+ *
+ *  So craters are bucketed into a coarse grid once, at module load. A lookup
+ *  is one array index, and the loop runs over the handful that can possibly
+ *  contribute. Rejection uses squared distance — `Math.hypot` is a slow call
+ *  in V8 because it guards against overflow — and the true distance is only
+ *  computed for craters that actually pass.
+ *
+ *  THE OUTPUT IS UNCHANGED. Exactly the same craters contribute exactly the
+ *  same amount at every point; this only stops asking the other forty-odd.
+ * ===========================================================================
+ */
+const CRATER_CELL = 256
+
+/**
+ * The grid is sized from the craters themselves, not from a guessed constant.
+ *
+ * Craters are placed out to 1450 m and the largest reaches 2.6 radii beyond
+ * its centre, so influence extends past the 1200 m playable extent. A grid
+ * that stopped short would silently drop those contributions outside its
+ * bounds and leave a step in the ground at the edge of the index — the kind
+ * of bug that never shows up where anybody is standing and corrupts the map
+ * and the far horizon.
+ */
+const CRATER_BOUND = CRATERS.reduce(
+  (m, c) => Math.max(m, Math.abs(c.x) + c.r * 2.6, Math.abs(c.z) + c.r * 2.6),
+  0,
+) + CRATER_CELL
+const CRATER_ORIGIN = -CRATER_BOUND
+const CRATER_GRID_N = Math.ceil((CRATER_BOUND * 2) / CRATER_CELL) + 1
+
+/** Per-crater values that never change, hoisted out of the sample loop. */
+interface CraterPrepared extends Crater {
+  /** Square of the radius beyond which the crater contributes nothing. */
+  reachSq: number
+  depth: number
+  rim: number
+  invR: number
+}
+
+const CRATER_GRID: CraterPrepared[][] = (() => {
+  const cells: CraterPrepared[][] = Array.from(
+    { length: CRATER_GRID_N * CRATER_GRID_N }, () => [],
+  )
+  for (const c of CRATERS) {
+    const reach = c.r * 2.6
+    const prepared: CraterPrepared = {
+      ...c,
+      reachSq: reach * reach,
+      depth: c.r * c.depthFrac,
+      rim: c.r * c.rimFrac,
+      invR: 1 / c.r,
+    }
+    // Add the crater to every cell its reach circle touches.
+    const i0 = Math.max(0, Math.floor((c.x - reach - CRATER_ORIGIN) / CRATER_CELL))
+    const i1 = Math.min(CRATER_GRID_N - 1, Math.floor((c.x + reach - CRATER_ORIGIN) / CRATER_CELL))
+    const j0 = Math.max(0, Math.floor((c.z - reach - CRATER_ORIGIN) / CRATER_CELL))
+    const j1 = Math.min(CRATER_GRID_N - 1, Math.floor((c.z + reach - CRATER_ORIGIN) / CRATER_CELL))
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) cells[j * CRATER_GRID_N + i].push(prepared)
+    }
+  }
+  return cells
+})()
+
+/** Craters that can possibly affect this point. Empty outside the field. */
+function cratersNear(x: number, z: number): CraterPrepared[] {
+  const i = Math.floor((x - CRATER_ORIGIN) / CRATER_CELL)
+  const j = Math.floor((z - CRATER_ORIGIN) / CRATER_CELL)
+  if (i < 0 || j < 0 || i >= CRATER_GRID_N || j >= CRATER_GRID_N) return EMPTY_CRATERS
+  return CRATER_GRID[j * CRATER_GRID_N + i]
+}
+
+const EMPTY_CRATERS: CraterPrepared[] = []
+
 function craterAt(x: number, z: number): number {
   let h = 0
-  for (const c of CRATERS) {
-    const d = Math.hypot(x - c.x, z - c.z)
-    if (d > c.r * 2.6) continue
-    const t = d / c.r
-    const depth = c.r * c.depthFrac
-    const rim = c.r * c.rimFrac
+  const near = cratersNear(x, z)
+  for (let k = 0; k < near.length; k++) {
+    const c = near[k]
+    const dx = x - c.x
+    const dz = z - c.z
+    const dSq = dx * dx + dz * dz
+    if (dSq > c.reachSq) continue
+    const t = Math.sqrt(dSq) * c.invR
     if (t < 1) {
       // Paraboloid bowl, flattening into the rim crest.
-      h += -depth * (1 - t * t) + rim * sstep(0.72, 1.0, t)
+      h += -c.depth * (1 - t * t) + c.rim * sstep(0.72, 1.0, t)
     } else {
       // Rim crest decaying into the ejecta blanket.
-      const e = Math.pow(1 / t, 3)
-      h += rim * e
+      const inv = 1 / t
+      h += c.rim * (inv * inv * inv)
     }
   }
   return h

@@ -49,7 +49,16 @@ export default function SurfaceScene() {
   const hazardOverlay = useStore((s) => s.hazardOverlay)
   const jackX = useStore((s) => s.jackX)
   const jackZ = useStore((s) => s.jackZ)
-  const dustFouling = useStore((s) => s.cons.dustFouling)
+  /**
+   * Dust loading, quantised.
+   *
+   * `cons.dustFouling` creeps up on every simulation tick, so selecting it raw
+   * re-rendered this entire scene — and with it Jack, the lander, the rocks
+   * and the rover — twenty times a second, to change a colour by a fiftieth
+   * of a percent. Rounding to 1/50 is visually identical and means the scene
+   * graph only reconciles when the value actually moves.
+   */
+  const dustFouling = useStore((s) => Math.round(s.cons.dustFouling * 50) / 50)
   const cachesUsed = useStore((s) => s.cachesUsed)
   const stormFromDeg = useStore((s) => s.stormFromDeg)
   const mastAt = useMemo(() => mastStation(nearStation), [nearStation])
