@@ -28,7 +28,7 @@ import {
 import { findTopic, pick, QUIPS } from '../ai/knowledge'
 import { FUNCTIONS, GREETING, buildPrompt } from '../ai/agentPrompt'
 import {
-  PcmPlayer, credential, forgetCredential, openAgent, openMic, readConfig,
+  PcmPlayer, credential, envConfig, forgetCredential, openAgent, openMic,
   resolveTier, speakDeepgram, speakLocally, transcribe,
   type AgentSession, type Credential, type MicStream, type Transcriber,
   type VoiceConfig, type VoiceTier,
@@ -85,7 +85,14 @@ export interface MervState {
 }
 
 export interface MervActions {
-  boot: () => Promise<void>
+  /**
+   * Bring the link up. `runKey` identifies the EVA: passing a new one resets
+   * the transcript first, and passing the same one again is a no-op. React's
+   * StrictMode invokes mount effects twice in development, and without this
+   * the player was greeted twice by a rover that had just forgotten the
+   * first greeting.
+   */
+  boot: (runKey?: string) => Promise<void>
   shutdown: () => void
   reset: () => void
   ask: (question: string) => Promise<void>
@@ -104,9 +111,7 @@ export interface MervActions {
 //  putting them in the store would re-render the panel every audio frame.
 // ---------------------------------------------------------------------------
 
-const cfg: VoiceConfig = readConfig(
-  (import.meta as unknown as { env: Record<string, string> }).env ?? {},
-)
+const cfg: VoiceConfig = envConfig()
 let cred: Credential | null = null
 let player: PcmPlayer | null = null
 let mic: MicStream | null = null
@@ -123,6 +128,8 @@ let tel: Telemetry | null = null
 /** Real seconds since the agent's prompt was refreshed with new telemetry. */
 let sincePromptPush = 0
 let seq = 0
+/** Which EVA the current link belongs to. See `boot`. */
+let bootedRun: string | null = null
 
 const nextId = () => `l${++seq}`
 
@@ -190,7 +197,10 @@ export const useMerv = create<MervState & MervActions>((set, get) => ({
   prompts: [],
 
   // -------------------------------------------------------------------------
-  boot: async () => {
+  boot: async (runKey = 'default') => {
+    if (bootedRun === runKey && get().booted) return
+    if (bootedRun !== null && bootedRun !== runKey) get().reset()
+    bootedRun = runKey
     if (get().booted) return
     set({ booted: true, link: 'connecting' })
 
@@ -270,9 +280,14 @@ export const useMerv = create<MervState & MervActions>((set, get) => ({
 
     // The greeting is a line in the transcript either way. On the agent tier
     // the model speaks its own greeting, so this is not spoken again.
-    const g = pick(QUIPS.greeting, Math.round(evaNow()))
-    get().say(g, { who: 'merv', tone: 'info' })
-    if (get().tier !== 'agent') void speakOut(g, set, get)
+    // On the agent tier the hosted model speaks its own greeting, which
+    // arrives as a ConversationText line. Adding ours as well greeted the
+    // player twice, in two different voices, about one second apart.
+    if (get().tier !== 'agent') {
+      const g = pick(QUIPS.greeting, Math.round(evaNow()))
+      get().say(g, { who: 'merv', tone: 'info' })
+      void speakOut(g, set, get)
+    }
 
     /**
      * Audio is off by default across this whole project, deliberately: the
@@ -378,6 +393,8 @@ export const useMerv = create<MervState & MervActions>((set, get) => ({
   startTalking: async () => {
     if (get().listening || get().tier === 'agent') return
     const tier = get().tier
+    /** Set when the Deepgram path failed and we dropped to the browser's. */
+    let downgraded: string | null = null
 
     if (tier === 'grounded' && cred) {
       try {
@@ -398,14 +415,23 @@ export const useMerv = create<MervState & MervActions>((set, get) => ({
         set({ listening: true })
         return
       } catch (err) {
-        console.warn('[MERV] microphone unavailable:', err)
-        set({ error: 'Microphone refused. Type your question instead.' })
+        // Falling through to the browser engine below is the right behaviour,
+        // but it must not look like success. A silent downgrade here is what
+        // hid a dead speech-to-text path during development: the Deepgram
+        // socket was throwing, the browser engine started, and the UI showed
+        // a working microphone that transcribed nothing.
+        console.warn('[MERV] Deepgram speech-to-text unavailable:', err)
+        downgraded = 'Deepgram speech-to-text did not come up, so this is the browser\'s own engine. Typing still works.'
       }
     }
 
     const Recog = browserRecognition()
     if (!Recog) {
-      set({ error: 'No speech input available in this browser. Type instead.' })
+      set({
+        error: downgraded
+          ? 'Deepgram speech-to-text did not come up and this browser has no speech input of its own. Type your question instead.'
+          : 'No speech input available in this browser. Type instead.',
+      })
       return
     }
     try {
@@ -423,7 +449,7 @@ export const useMerv = create<MervState & MervActions>((set, get) => ({
       r.onend = () => { set({ listening: false }); live.rover.listening = 0 }
       r.start()
       recog = r
-      set({ listening: true, error: null })
+      set({ listening: true, error: downgraded })
       live.rover.listening = 1
     } catch {
       set({ error: 'Speech input unavailable. Type instead.' })

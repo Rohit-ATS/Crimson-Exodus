@@ -100,6 +100,17 @@ export function readConfig(env: ViteEnv): VoiceConfig {
   }
 }
 
+/**
+ * The configuration this build was started with.
+ *
+ * `readConfig` takes a plain object so it can be unit-tested without a
+ * bundler; this is the one place that actually reaches for Vite's env, which
+ * keeps `import.meta` out of every other module that needs the settings.
+ */
+export function envConfig(): VoiceConfig {
+  return readConfig((import.meta as unknown as { env?: Record<string, string> }).env ?? {})
+}
+
 /** True when a raw bundled key is acceptable: local development only. */
 export function rawKeyAllowed(hostname: string, dev: boolean): boolean {
   if (!dev) return false
@@ -478,7 +489,20 @@ export function transcribe(
   let everWorked = false
   let attempt = 0
   let ws = dgSocket(`${DG_LISTEN}?${q}`, cred, attempt)
-  bind(ws)
+
+  /**
+   * Handlers are function DECLARATIONS, not const arrows.
+   *
+   * `bind` runs immediately on the line below, and a `const` handler declared
+   * after it would still be in its temporal dead zone — which threw
+   * "Cannot access 'onMessage' before initialization" and took the whole
+   * speech-to-text path down silently, because the caller's catch treated it
+   * as a missing microphone. Declarations hoist; these must.
+   */
+  function onMessage(e: MessageEvent): void {
+    everWorked = true
+    handleListen(e)
+  }
 
   function bind(sock: WebSocket): void {
     sock.onopen = () => {
@@ -501,12 +525,29 @@ export function transcribe(
     }
   }
 
-  const onMessage = (e: MessageEvent) => {
-    everWorked = true
-    return handleListen(e)
+  bind(ws)
+
+  /**
+   * Deepgram finalises in two stages, and conflating them asks the same
+   * question twice.
+   *
+   * `is_final` closes a SEGMENT — a long question produces several. The
+   * utterance is only over at `speech_final`, when the endpointer has heard
+   * enough silence. Submitting on either one meant a two-sentence question
+   * arrived as two separate questions and got two unrelated answers.
+   *
+   * So segments accumulate here and are submitted once, on `speech_final` or
+   * when the player releases the key, whichever comes first.
+   */
+  let segments: string[] = []
+
+  function flush(): void {
+    const whole = segments.join(' ').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '')
+    segments = []
+    if (whole) handlers.onFinal?.(whole)
   }
 
-  function handleListen(e: MessageEvent) {
+  function handleListen(e: MessageEvent): void {
     if (typeof e.data !== 'string') return
     try {
       const msg = JSON.parse(e.data) as {
@@ -515,10 +556,22 @@ export function transcribe(
         speech_final?: boolean
         channel?: { alternatives?: Array<{ transcript?: string }> }
       }
-      const text = msg.channel?.alternatives?.[0]?.transcript?.trim()
-      if (!text) return
-      if (msg.is_final || msg.speech_final) handlers.onFinal?.(text)
-      else handlers.onInterim?.(text)
+      const text = msg.channel?.alternatives?.[0]?.transcript?.replace(/^\s+|\s+$/g, '')
+      if (!text) {
+        // An empty speech_final still ends the utterance.
+        if (msg.speech_final) flush()
+        return
+      }
+      if (msg.is_final) {
+        segments.push(text)
+        if (msg.speech_final) flush()
+      } else if (msg.speech_final) {
+        segments.push(text)
+        flush()
+      } else {
+        // Show the segments already closed plus the words still arriving.
+        handlers.onInterim?.([...segments, text].join(' '))
+      }
     } catch { /* a frame we do not understand is not worth failing over */ }
   }
   return {
@@ -529,6 +582,10 @@ export function transcribe(
       else if (ws.readyState === WebSocket.CONNECTING && pending.length < 64) pending.push(pcm.slice(0))
     },
     finish: () => {
+      // Submit whatever has been finalised so far. Releasing the key is the
+      // player saying they are done; waiting for Deepgram's endpointer after
+      // that just adds latency to an answer they have already asked for.
+      flush()
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'CloseStream' }))
     },
     close: () => { try { ws.close() } catch { /* ignore */ } },
@@ -634,8 +691,6 @@ export function openAgent(
     },
   }
 
-  bind()
-
   function bind(): void {
     ws.binaryType = 'arraybuffer'
     ws.onopen = onOpen
@@ -655,7 +710,15 @@ export function openAgent(
     }, 8000)
   }
 
-  const onMessage = async (e: MessageEvent) => {
+  /**
+   * A function DECLARATION, for the same reason as in `transcribe` above:
+   * `bind` references it, and a `const` arrow declared further down would
+   * still be in its temporal dead zone when `bind` first runs. That threw
+   * "Cannot access 'onMessage' before initialization", and because the caller
+   * treats any failure here as "agent unavailable", it degraded silently to
+   * the offline tier instead of reporting a broken socket.
+   */
+  async function onMessage(e: MessageEvent): Promise<void> {
     // Binary frames are MERV's voice.
     if (e.data instanceof ArrayBuffer) {
       h.onAudio?.(new Int16Array(e.data, 0, Math.floor(e.data.byteLength / 2)))
@@ -713,6 +776,8 @@ export function openAgent(
       default: break
     }
   }
+
+  bind()
 
   function onClose(ev: CloseEvent): void {
     if (keepAlive) clearInterval(keepAlive)

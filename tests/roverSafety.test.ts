@@ -78,6 +78,41 @@ describe('rover driving model', () => {
   })
 })
 
+describe('socket handlers are reachable when bind runs', () => {
+  const voice = read('src/ai/voice.ts')
+
+  it('declares every WebSocket handler as a hoisted function', () => {
+    /**
+     * This cost two silent outages, one per socket. `bind()` attaches the
+     * handlers and runs immediately; a handler written as `const x = () => {}`
+     * further down the function is still in its temporal dead zone at that
+     * point and throws "Cannot access 'x' before initialization". Both call
+     * sites catch broadly and degrade to the offline tier, so the symptom was
+     * a rover that worked — with the entire Deepgram path dead behind it.
+     *
+     * Function declarations hoist. These must stay declarations.
+     */
+    for (const name of ['onMessage', 'onOpen', 'onClose', 'handleListen', 'flush']) {
+      assert.doesNotMatch(
+        voice,
+        new RegExp(`const ${name}\\s*=`),
+        `${name} must be a function declaration, not a const — see the comment in voice.ts`,
+      )
+    }
+    assert.match(voice, /function onMessage\(/)
+    assert.match(voice, /async function onMessage\(/)
+  })
+
+  it('submits one question per utterance, not one per segment', () => {
+    // Deepgram closes a SEGMENT with is_final and the UTTERANCE with
+    // speech_final. Treating them alike split a two-sentence question into
+    // two unrelated questions with two unrelated answers.
+    assert.match(voice, /let segments: string\[\] = \[\]/)
+    assert.match(voice, /if \(msg\.is_final\) \{\s*\n\s*segments\.push\(text\)/)
+    assert.doesNotMatch(voice, /if \(msg\.is_final \|\| msg\.speech_final\) handlers\.onFinal/)
+  })
+})
+
 describe('voice credentials cannot leak through the bundle', () => {
   it('ships a token-minting function for both hosts', () => {
     for (const f of ['api/deepgram-token.ts', 'netlify/functions/deepgram-token.mts']) {

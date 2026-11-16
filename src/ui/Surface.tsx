@@ -33,9 +33,10 @@ export default function Surface() {
    * last one's conversation.
    */
   useEffect(() => {
-    const merv = useMerv.getState()
-    merv.reset()
-    void merv.boot()
+    // Keyed to this EVA's start time, so a second run gets a fresh transcript
+    // and StrictMode's duplicate mount does not greet the player twice.
+    const runKey = String(useStore.getState().time.startedAt.getTime())
+    void useMerv.getState().boot(runKey)
     return () => useMerv.getState().shutdown()
   }, [])
 
