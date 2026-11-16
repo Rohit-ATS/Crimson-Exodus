@@ -11,6 +11,7 @@ export interface LocalMapProps {
   /** Routes to draw faintly for comparison. */
   showAllRoutes?: boolean
   jack?: { x: number; z: number; heading: number } | null
+  jack2?: { x: number; z: number; heading: number; label?: string } | null
   weather?: WeatherEvent
   stormFromDeg?: number
   sunAzDeg: number
@@ -29,7 +30,7 @@ const RES = 420
 
 export default function LocalMap(props: LocalMapProps) {
   const {
-    layer, routeId, showAllRoutes, jack, weather, stormFromDeg,
+    layer, routeId, showAllRoutes, jack, jack2, weather, stormFromDeg,
     sunAzDeg, sunElDeg, compact, size = 520, onHover, visitedStations, flag, cachesUsed,
   } = props
 
@@ -280,6 +281,39 @@ export default function LocalMap(props: LocalMapProps) {
       ctx.lineTo(lx, ly)
       ctx.stroke()
       ctx.setLineDash([])
+    }
+
+    // --- Jack 2 (EV-2 or crew member) -------------------------------------
+    if (jack2) {
+      const [px2, py2] = W(jack2.x, jack2.z)
+      ctx.save()
+      ctx.translate(px2, py2)
+      ctx.rotate(-jack2.heading)
+      ctx.beginPath()
+      ctx.moveTo(0, -9); ctx.lineTo(6, 7); ctx.lineTo(0, 3.5); ctx.lineTo(-6, 7)
+      ctx.closePath()
+      ctx.fillStyle = '#4fe8ff'
+      ctx.fill()
+      ctx.strokeStyle = '#04070c'
+      ctx.lineWidth = 1.4
+      ctx.stroke()
+      ctx.restore()
+      ctx.fillStyle = '#4fe8ff'
+      ctx.font = 'bold 10px Share Tech Mono, monospace'
+      ctx.fillText(jack2.label ?? 'EV-2', px2 + 8, py2 - 4)
+
+      // Tether line between EV-1 and EV-2
+      if (jack) {
+        const [px1, py1] = W(jack.x, jack.z)
+        ctx.beginPath()
+        ctx.setLineDash([2, 4])
+        ctx.strokeStyle = 'rgba(79,232,255,0.45)'
+        ctx.lineWidth = 1.2
+        ctx.moveTo(px1, py1)
+        ctx.lineTo(px2, py2)
+        ctx.stroke()
+        ctx.setLineDash([])
+      }
     }
 
     // --- Scale bar and north arrow ---------------------------------------

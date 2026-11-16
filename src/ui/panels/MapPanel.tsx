@@ -6,9 +6,12 @@ import { LAYERS, slopeLegend, type LayerId } from '../map/layers'
 import { useStore } from '../../state/store'
 import { SHELTERS } from '../../mission/site'
 import { protectionAt } from '../../sim/hazard'
+import { useMultiplayer } from '../../multiplayer/client'
 
-export default function MapPanel() {
+export default function MapPanel({ onClose }: { onClose?: () => void } = {}) {
   const s = useStore()
+  const close = onClose ?? (() => s.setUi(null))
+  const ev2Pose = useMultiplayer((state) => state.poses.ev2)
   const [layer, setLayer] = useState<LayerId>(s.hazardOverlay ? 'hazard' : 'relief')
   const meta = LAYERS.find((l) => l.id === layer)!
 
@@ -28,7 +31,7 @@ export default function MapPanel() {
   )
 
   return (
-    <Modal title="Mission map" onClose={() => s.setUi(null)} width={1180}>
+    <Modal title="Mission map" onClose={close} width={1180}>
       <div className="row gap6 wrap" style={{ marginBottom: 10 }}>
         {LAYERS.map((l) => (
           <button key={l.id} className={`btn sm ${layer === l.id ? 'on' : 'ghost'}`} onClick={() => setLayer(l.id)}>
@@ -57,6 +60,7 @@ export default function MapPanel() {
           layer={layer}
           routeId={s.routeId}
           jack={{ x: s.jackX, z: s.jackZ, heading: s.jackHeading }}
+          jack2={ev2Pose ? { x: ev2Pose.x, z: ev2Pose.z, heading: ev2Pose.heading, label: 'EV-2' } : null}
           weather={s.weather}
           stormFromDeg={s.stormFromDeg}
           sunAzDeg={s.clock.sunAzimuthDeg}

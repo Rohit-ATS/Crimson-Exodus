@@ -4,11 +4,12 @@ import { JACK_SUIT } from '../../sim/consumables'
 import { STATIONS } from '../../mission/site'
 import { flagUrl } from '../../data/countries'
 
-export default function BackpackPanel() {
+export default function BackpackPanel({ onClose }: { onClose?: () => void } = {}) {
   const s = useStore()
+  const close = onClose ?? (() => s.setUi(null))
 
   return (
-    <Modal title="Backpack — PLSS and field kit" onClose={() => s.setUi(null)} width={900}>
+    <Modal title="Backpack — PLSS and field kit" onClose={close} width={900}>
       <div className="row gap16 wrap" style={{ alignItems: 'flex-start' }}>
         {/* Consumables */}
         <div className="stack gap8" style={{ width: 288, flex: '0 0 288px' }}>

@@ -12,7 +12,7 @@ import RoverImageCard from './RoverImageCard'
  * DIAGRAM, labelled as such: it is not an image of Mars and not a photograph of
  * the real feature.
  */
-function OutcropGraphic({ station }: { station: (typeof STATIONS)[number] }) {
+export function OutcropGraphic({ station }: { station: (typeof STATIONS)[number] }) {
   const common: React.CSSProperties = {
     position: 'absolute',
     left: 0,

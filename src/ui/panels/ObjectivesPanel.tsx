@@ -88,15 +88,16 @@ function Row({ o }: { o: Objective }) {
   )
 }
 
-export default function ObjectivesPanel() {
+export default function ObjectivesPanel({ onClose }: { onClose?: () => void } = {}) {
   const s = useStore()
+  const close = onClose ?? (() => s.setUi(null))
   const [tab, setTab] = useState<'mission' | 'guide'>('mission')
   const m = missionStatus(s)
   const learned = s.lessons.map((id) => LESSONS[id]).filter(Boolean)
   const unlearned = Object.values(LESSONS).filter((l) => !s.lessons.includes(l.id))
 
   return (
-    <Modal title="Mission objectives" onClose={() => s.setUi(null)} width={900}>
+    <Modal title="Mission objectives" onClose={close} width={900}>
       <div className="row gap6 wrap" style={{ marginBottom: 12 }}>
         <button className={`btn sm ${tab === 'mission' ? 'on' : 'ghost'}`} onClick={() => setTab('mission')}>
           Mission
