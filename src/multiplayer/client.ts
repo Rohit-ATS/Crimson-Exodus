@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import {
   MULTIPLAYER_PROTOCOL, multiplayerEndpoint, normalizeRoomCode,
-  type ClientMessage, type CrewMessage, type MissionSnapshot, type MultiplayerRole,
+  sameConnectionIntent, type ClientMessage, type ConnectionIntent, type CrewMessage, type MissionSnapshot, type MultiplayerRole,
   type OpsCommand, type OpsCommandKind, type ServerMessage,
 } from './protocol'
 
@@ -31,12 +31,10 @@ interface MultiplayerState {
   sendChat: (text: string) => void
 }
 
-type Intent = { mode: 'create' } | { mode: 'join'; roomCode: string; role: MultiplayerRole; resumeToken?: string }
-
 const env = (import.meta as unknown as { env: Record<string, string | undefined> }).env ?? {}
 const endpoint = typeof window === 'undefined' ? null : multiplayerEndpoint(env.VITE_MULTIPLAYER_URL, window.location)
 let socket: WebSocket | null = null
-let intent: Intent | null = null
+let intent: ConnectionIntent | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let reconnectAttempt = 0
 let closedByUser = false
@@ -71,7 +69,19 @@ function transmit(message: ClientMessage) {
   if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message))
 }
 
-function connect(nextIntent: Intent) {
+function connect(nextIntent: ConnectionIntent) {
+  // React does not repaint the disabled button until after the current event
+  // turn. A double click (or Enter followed by a click) can therefore call
+  // joinMission twice while the first socket is still opening. Do not replace
+  // an in-flight/active connection with an identical one: the first socket may
+  // already own the role on the server, making the replacement look like a
+  // different HABCOM client and producing a false ROLE_TAKEN error.
+  if (
+    socket
+    && (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN)
+    && sameConnectionIntent(intent, nextIntent)
+  ) return
+
   const thisGeneration = ++generation
   intent = nextIntent
   closedByUser = false

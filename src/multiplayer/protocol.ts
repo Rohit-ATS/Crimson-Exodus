@@ -2,6 +2,9 @@ export const MULTIPLAYER_PROTOCOL = 1 as const
 
 export type MultiplayerRole = 'ev' | 'habcom'
 export type OpsCommandKind = 'go' | 'hold' | 'return'
+export type ConnectionIntent =
+  | { mode: 'create' }
+  | { mode: 'join'; roomCode: string; role: MultiplayerRole; resumeToken?: string }
 
 export interface MissionSnapshot {
   protocol: typeof MULTIPLAYER_PROTOCOL
@@ -95,6 +98,14 @@ export type ServerMessage =
 
 export function normalizeRoomCode(value: string): string {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)
+}
+
+export function sameConnectionIntent(current: ConnectionIntent | null, next: ConnectionIntent): boolean {
+  if (!current || current.mode !== next.mode) return false
+  if (current.mode === 'create' || next.mode === 'create') return true
+  return current.roomCode === next.roomCode
+    && current.role === next.role
+    && current.resumeToken === next.resumeToken
 }
 
 export function multiplayerEndpoint(envValue: string | undefined, location: Location): string | null {
