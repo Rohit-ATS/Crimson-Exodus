@@ -327,6 +327,105 @@ export async function speakDeepgram(
   cfg: VoiceConfig,
   signal?: AbortSignal,
 ): Promise<Int16Array> {
+  const parts: Int16Array[] = []
+  await speakDeepgramStream(text, cred, cfg, (pcm) => parts.push(pcm), signal)
+  const total = parts.reduce((n, p) => n + p.length, 0)
+  const out = new Int16Array(total)
+  let at = 0
+  for (const p of parts) { out.set(p, at); at += p.length }
+  return out
+}
+
+/**
+ * Decodes a linear16 response arriving in pieces.
+ *
+ * Two things have to be handled and both of them bit us.
+ *
+ *  1. Deepgram's REST speak endpoint returns a RIFF/WAVE CONTAINER, not bare
+ *     samples, and the old code mapped an Int16Array straight over the whole
+ *     body. Those 44 header bytes were played as 22 samples of garbage, which
+ *     is the click that preceded every single line MERV spoke.
+ *  2. A chunk boundary falls wherever the network puts it, including halfway
+ *     through a sample and halfway through the header. Both cases are carried
+ *     over to the next chunk rather than being rounded away.
+ */
+export class LinearPcmStream {
+  /** Bytes held back: either the partial header or a trailing odd byte. */
+  private carry = new Uint8Array(0)
+  private sawHeader = false
+
+  /** Feed one network chunk; returns the samples that are now complete. */
+  push(chunk: Uint8Array): Int16Array | null {
+    let buf = this.carry.length ? concatBytes(this.carry, chunk) : chunk
+    this.carry = new Uint8Array(0)
+
+    if (!this.sawHeader) {
+      const start = pcmStart(buf)
+      // Not enough bytes yet to tell where the samples begin. Hold everything.
+      // Copied, not aliased: the caller owns the chunk it handed us.
+      if (start < 0) { this.carry = buf.slice(); return null }
+      buf = buf.subarray(start)
+      this.sawHeader = true
+    }
+
+    const whole = buf.length - (buf.length % 2)
+    if (whole < buf.length) this.carry = buf.subarray(whole).slice()
+    if (whole === 0) return null
+
+    // A subarray does not guarantee an even byteOffset, which Int16Array
+    // requires, so the bytes are copied into an aligned buffer.
+    const aligned = buf.slice(0, whole)
+    return new Int16Array(aligned.buffer, aligned.byteOffset, whole / 2)
+  }
+}
+
+function concatBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
+  const out = new Uint8Array(a.length + b.length)
+  out.set(a, 0)
+  out.set(b, a.length)
+  return out
+}
+
+/**
+ * Byte offset where the samples start.
+ *
+ * -1 means "undecided, send me more". A RIFF file puts the samples after the
+ * `data` chunk header; anything that does not begin with `RIFF` is treated as
+ * bare PCM and starts at zero, so this keeps working if Deepgram ever stops
+ * wrapping the response.
+ */
+export function pcmStart(buf: Uint8Array): number {
+  if (buf.length < 4) return -1
+  const isRiff = buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46
+  if (!isRiff) return 0
+  // Scan for the four bytes 'data', then skip it and its 4-byte length.
+  for (let i = 4; i + 8 <= buf.length; i += 1) {
+    if (buf[i] === 0x64 && buf[i + 1] === 0x61 && buf[i + 2] === 0x74 && buf[i + 3] === 0x61) {
+      return i + 8
+    }
+  }
+  // A header this long is not a header. Give up rather than buffer forever.
+  return buf.length > 4096 ? 0 : -1
+}
+
+/**
+ * Deepgram text-to-speech, played WHILE it arrives.
+ *
+ * This is the difference between a companion and a voicemail system. The
+ * endpoint starts returning audio about 300 ms after the request, but it
+ * takes as long as the speech itself to finish sending — a full status
+ * readout measured 17.3 seconds end to end. Waiting for `arrayBuffer()` meant
+ * seventeen seconds of silence before the first word, every time MERV
+ * answered a question properly. Reading the body as a stream and queueing
+ * each chunk on the player brings the first word forward to the first byte.
+ */
+export async function speakDeepgramStream(
+  text: string,
+  cred: Credential,
+  cfg: VoiceConfig,
+  onPcm: (pcm: Int16Array) => void,
+  signal?: AbortSignal,
+): Promise<void> {
   const url = `${DG_SPEAK}?model=${encodeURIComponent(cfg.voice)}&encoding=linear16&sample_rate=${OUT_RATE}`
   const res = await fetch(url, {
     method: 'POST',
@@ -338,10 +437,25 @@ export async function speakDeepgram(
     signal,
   })
   if (!res.ok) throw new Error(`Deepgram speak failed: ${res.status}`)
-  const bytes = await res.arrayBuffer()
-  // linear16 is little-endian signed PCM; the platform is too, on everything
-  // this app runs on, so the view is free.
-  return new Int16Array(bytes, 0, Math.floor(bytes.byteLength / 2))
+
+  const decoder = new LinearPcmStream()
+
+  // Streaming is the whole point, but a body with no reader (an old browser,
+  // a polyfilled fetch) must still speak rather than throw.
+  if (!res.body) {
+    const pcm = decoder.push(new Uint8Array(await res.arrayBuffer()))
+    if (pcm?.length) onPcm(pcm)
+    return
+  }
+
+  const reader = res.body.getReader()
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (!value?.length) continue
+    const pcm = decoder.push(value)
+    if (pcm?.length) onPcm(pcm)
+  }
 }
 
 // ---------------------------------------------------------------------------

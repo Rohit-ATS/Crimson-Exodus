@@ -187,9 +187,27 @@ export const TOPICS: Topic[] = [
       'A sol is 24 hours 39 minutes and 35 seconds, so about 2.7 percent longer than an Earth day. That sounds trivial and it is not: crews working on Mars time drift out of phase with Earth by about 40 minutes a sol, which is why mission teams have historically burned out on it. A Mars year is 687 Earth days, so seasons last roughly twice as long — and southern spring and summer are when the dust gets dangerous.',
     source: 'NASA Mars fact sheet; MSL and MER operations experience',
   },
+  /**
+   * The most-asked question about Mars, and it used to be refused.
+   *
+   * 'why is mars red' matched no key here: the sky entry carried 'why red',
+   * which the phrase people actually say does not contain. The redness also
+   * deserves its own answer — it is a fact about the ground and the dust, not
+   * about scattering in the sky.
+   */
+  {
+    id: 'rust',
+    keys: ['why is mars red', 'why is it red', 'mars red', 'red planet', 'why red', 'rust',
+      'rusty', 'rusted', 'iron oxide', 'what colour is mars', 'what color is mars',
+      'red dust', 'red soil', 'why is the ground red'],
+    answer:
+      'Mars is red because it is rusted. The surface is loaded with iron, and that iron has oxidised to nanophase ferric oxide — the same chemistry as rust on a gate, run over billions of years with whatever oxygen the atmosphere could spare. The coating is extremely thin, which is why abrading a rock turns it grey or green underneath within a millimetre. That is the whole reason you carry an abrasion tool: the red is a weathering rind, and the rock you actually came to read is under it.',
+    source: 'Viking and Pathfinder soil chemistry; MER Mossbauer spectrometry; Perseverance abrasion patches',
+    lesson: 'rind',
+  },
   {
     id: 'sky',
-    keys: ['sky', 'sky colour', 'sky color', 'sunset', 'blue sunset', 'why red', 'colour of mars', 'color of mars'],
+    keys: ['sky', 'sky colour', 'sky color', 'sunset', 'blue sunset', 'colour of the sky', 'color of the sky'],
     answer:
       'Backwards from Earth, and for the same physics. Here the dust particles are a few microns across, which is large compared with visible wavelengths, so they forward-scatter blue light into a tight halo around the sun. The result is a butterscotch daytime sky and a genuinely blue sunset. The ground is red because of iron oxide — the planet is rusted. Spirit and Perseverance both photographed those blue sunsets, and they look wrong every time.',
     source: 'Spirit and Perseverance sunset imaging; Mie scattering by micron-scale dust',

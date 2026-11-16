@@ -29,7 +29,7 @@ import { findTopic, pick, QUIPS } from '../ai/knowledge'
 import { FUNCTIONS, GREETING, buildPrompt } from '../ai/agentPrompt'
 import {
   PcmPlayer, credential, envConfig, forgetCredential, openAgent, openMic,
-  resolveTier, speakDeepgram, speakLocally, transcribe,
+  resolveTier, speakDeepgramStream, speakLocally, transcribe,
   type AgentSession, type Credential, type MicStream, type Transcriber,
   type VoiceConfig, type VoiceTier,
 } from '../ai/voice'
@@ -118,6 +118,8 @@ let mic: MicStream | null = null
 let stt: Transcriber | null = null
 let agent: AgentSession | null = null
 let localStop: (() => void) | null = null
+/** Cancels an in-flight Deepgram response when MERV is interrupted. */
+let speakAbort: AbortController | null = null
 /** Browser speech recognition, used only on the local tier. */
 let recog: { stop: () => void } | null = null
 /** Real seconds since the last unprompted line. */
@@ -128,6 +130,8 @@ let tel: Telemetry | null = null
 /** Real seconds since the agent's prompt was refreshed with new telemetry. */
 let sincePromptPush = 0
 let seq = 0
+/** Bumped per spoken line, so a superseded stream stops queueing audio. */
+let speakSeq = 0
 /** Which EVA the current link belongs to. See `boot`. */
 let bootedRun: string | null = null
 
@@ -207,6 +211,7 @@ export const useMerv = create<MervState & MervActions>((set, get) => ({
     const hasMic = typeof navigator !== 'undefined'
       && !!navigator.mediaDevices?.getUserMedia
     set({ micAvailable: hasMic || !!browserRecognition() })
+    void prewarmMic()
 
     // Does a credential exist, and is it one we are willing to use here?
     try {
@@ -467,6 +472,11 @@ export const useMerv = create<MervState & MervActions>((set, get) => ({
   },
 
   stopSpeaking: () => {
+    // Invalidate any line still streaming in, or its remaining chunks would
+    // keep arriving and start playing again after the player was stopped.
+    speakSeq += 1
+    speakAbort?.abort()
+    speakAbort = null
     localStop?.()
     localStop = null
     player?.stop()
@@ -577,30 +587,85 @@ function fallBack(set: Set, why: string): void {
 }
 
 /** Speak one line on whichever tier is running. Never throws. */
+/**
+ * Open the microphone ahead of the first press, but only if that is free.
+ *
+ * Opening it costs a permission prompt, an AudioContext and an AudioWorklet
+ * fetch — around half a second of work that used to happen after the player
+ * had already started speaking into a dead microphone. When permission has
+ * already been granted none of that needs to wait, and nothing is shown to
+ * the player. When it has not, this does nothing at all: a companion that
+ * demands the microphone the instant the hatch opens is worse than one that
+ * takes an extra moment the first time you hold the talk key.
+ */
+async function prewarmMic(): Promise<void> {
+  if (mic) return
+  try {
+    const perm = await navigator.permissions?.query({ name: 'microphone' as PermissionName })
+    if (perm?.state !== 'granted') return
+    mic = await openMic()
+    // Captured but discarded until the player actually holds the key.
+    mic.mute(true)
+  } catch {
+    // No Permissions API, or it refused the query. The first press will open
+    // the microphone the slow way, which is exactly what used to happen.
+  }
+}
+
 async function speakOut(text: string, set: Set, get: Get): Promise<void> {
   const s = get()
   if (s.muted || !useSettings.getState().audio) return
 
+  // A typed question can arrive while an advisory is still being synthesized.
+  // Stop that response before starting another, including its network stream.
+  const speakId = ++speakSeq
+  speakAbort?.abort()
+  speakAbort = null
+  localStop?.()
+  localStop = null
+  player?.stop()
+
   if (s.tier === 'grounded' && cred) {
+    const controller = new AbortController()
+    speakAbort = controller
     try {
       set({ speaking: true })
       live.rover.talking = 1
-      const pcm = await speakDeepgram(text, cred, cfg)
-      ensurePlayer().push(pcm)
-      // Release the talking flag when the queued audio has actually played.
-      const ms = (pcm.length / 24000) * 1000 + 120
+      /**
+       * Each chunk is queued the moment it lands rather than after the whole
+       * line has been synthesised. The player schedules frames end to end, so
+       * handing it the audio progressively is seamless — and it is what makes
+       * MERV answer in about a third of a second instead of after a pause
+       * that scaled with how good the answer was.
+       */
+      await speakDeepgramStream(text, cred, cfg, (pcm) => {
+        // A newer line started while this one was still arriving: drop the
+        // rest of it rather than talking over himself.
+        if (speakId === speakSeq) ensurePlayer().push(pcm)
+      }, controller.signal)
+      if (speakAbort === controller) speakAbort = null
+      if (speakId !== speakSeq) return
+      // Release the talking flag when the queued audio has actually finished.
       window.setTimeout(() => {
+        if (speakId !== speakSeq) return
         set({ speaking: false })
         live.rover.talking = 0
-      }, ms)
+      }, (player?.pending ?? 0) * 1000 + 160)
       return
     } catch (err) {
+      if (speakAbort === controller) speakAbort = null
+      // An explicit interruption is not a synthesis failure, and must not
+      // start a local voice after the player was stopped.
+      if (speakId !== speakSeq || controller.signal.aborted) return
       console.warn('[MERV] Deepgram speech failed, using the local engine:', err)
       forgetCredential()
+      // A partial Deepgram line may already have been queued. Clear it before
+      // speaking the complete line locally to avoid overlap and repetition.
+      player?.stop()
     }
   }
 
-  localStop?.()
+  if (speakId !== speakSeq) return
   localStop = speakLocally(text, {
     onStart: () => { set({ speaking: true }); live.rover.talking = 1 },
     onEnd: () => { set({ speaking: false }); live.rover.talking = 0; localStop = null },
